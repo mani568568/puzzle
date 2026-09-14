@@ -45,6 +45,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -176,11 +177,19 @@ fun PicturePuzzleGameScreen(
         scope.launch { settings.saveSession(level.id, engine.getCurrentPositions(), 0) }
     }
 
+    val gameBackground = Brush.verticalGradient(
+        colors = listOf(
+            MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.82f),
+            MaterialTheme.colorScheme.background,
+            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.68f)
+        )
+    )
+
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .padding(horizontal = 6.dp),
+            .background(gameBackground)
+            .padding(horizontal = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Row(
@@ -230,7 +239,7 @@ fun PicturePuzzleGameScreen(
                     )
                 }
             }
-            Spacer(Modifier.height(3.dp))
+            Spacer(Modifier.height(14.dp))
         }
 
         when {
@@ -298,7 +307,9 @@ fun PicturePuzzleGameScreen(
                                 }
                             }
                         },
-                        modifier = Modifier.fillMaxSize()
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 2.dp)
                     )
 
                     CelebrationBanner(

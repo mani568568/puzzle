@@ -217,6 +217,11 @@ class PuzzleEngine(
             result[tileId] = movedRow * gridSize + movedCol
         }
 
+        // Movement is intentionally independent from merging. A loose tile or an already
+        // connected cluster may be dropped on any grid destination where its own rigid shape
+        // fits. Tiles already occupying the destination footprint are reflowed into the cells
+        // vacated by the moving piece in [attemptMoveGroup]. If that changes another cluster's
+        // correct adjacency, connectivity is simply recalculated after the move.
         return result
     }
 

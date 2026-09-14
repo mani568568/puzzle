@@ -93,8 +93,8 @@ fun PuzzleBoard(
         Box(
             modifier = Modifier
                 .size(boardSize)
-                .background(surface, RoundedCornerShape(14.dp))
-                .border(1.5.dp, primary.copy(alpha = 0.48f), RoundedCornerShape(14.dp))
+                .background(surface.copy(alpha = 0.96f), RoundedCornerShape(16.dp))
+                .border(2.dp, primary.copy(alpha = 0.56f), RoundedCornerShape(16.dp))
         ) {
             // A single shared preview footprint keeps merged pieces looking like one object.
             val anchor = draggingAnchorTileId
@@ -321,45 +321,6 @@ fun PuzzleBoard(
                                 shadowElevation = 0f
                                 clip = false
                             }
-                            .pointerInput(groupKey, boardVersion, tileSizePx) {
-                                detectDragGestures(
-                                    onDragStart = { startOffset ->
-                                        // Pick the tile under the finger as the anchor when possible.
-                                        val localCol = floor(startOffset.x / tileSizePx).toInt().coerceIn(0, widthCells - 1)
-                                        val localRow = floor(startOffset.y / tileSizePx).toInt().coerceIn(0, heightCells - 1)
-                                        val boardPosition = (minRow + localRow) * gridSize + (minCol + localCol)
-                                        val touchedTile = positions.getOrNull(boardPosition)
-                                            ?.takeIf { it in group }
-                                            ?: group.first()
-                                        draggingAnchorTileId = touchedTile
-                                        draggingGroupIds = group
-                                        dragDelta = Offset.Zero
-                                        hoverPosition = engine.getPositionOf(touchedTile)
-                                    },
-                                    onDragCancel = { resetDrag() },
-                                    onDragEnd = {
-                                        val anchorId = draggingAnchorTileId
-                                        val to = hoverPosition
-                                        if (anchorId != null && to != null && engine.getPositionOf(anchorId) != to) {
-                                            onGroupDropped(anchorId, to)
-                                        }
-                                        resetDrag()
-                                    },
-                                    onDrag = { change, amount ->
-                                        change.consume()
-                                        dragDelta += amount
-                                        val anchorId = draggingAnchorTileId ?: group.first()
-                                        hoverPosition = calculateHoverPosition(
-                                            engine = engine,
-                                            anchorTileId = anchorId,
-                                            fallbackPosition = engine.getPositionOf(anchorId),
-                                            dragDelta = dragDelta,
-                                            tileSizePx = tileSizePx,
-                                            gridSize = gridSize
-                                        )
-                                    }
-                                )
-                            }
                     ) {
                         val occupiedPositions = group.map { positions.indexOf(it) }.toSet()
                         val mask = Path()
@@ -447,6 +408,68 @@ fun PuzzleBoard(
                             if (boardCol == gridSize - 1 || boardPosition + 1 !in occupiedPositions) {
                                 outerEdge(Offset(right, top), Offset(right, bottom))
                             }
+                        }
+                    }
+
+                    // Important: keep gesture hit-testing on the *actual occupied cells*, not on
+                    // the rectangular bounding box of the merged artwork. An L/T-shaped merged
+                    // fragment can contain transparent holes inside its bounds; a large rectangular
+                    // pointer target would otherwise sit on top of loose tiles in those holes and
+                    // make them feel impossible to pick up or drag across the merged fragment.
+                    group.forEach { hitTileId ->
+                        val hitBoardPosition = positions.indexOf(hitTileId)
+                        if (hitBoardPosition >= 0) {
+                            val hitBoardRow = hitBoardPosition / gridSize
+                            val hitBoardCol = hitBoardPosition % gridSize
+                            val localHitRow = hitBoardRow - minRow
+                            val localHitCol = hitBoardCol - minCol
+                            val hitX = animatedX + localHitCol * tileSizePx + visualDrag.x
+                            val hitY = animatedY + localHitRow * tileSizePx + visualDrag.y
+
+                            Canvas(
+                                modifier = Modifier
+                                    .size(tileSize)
+                                    .offset {
+                                        IntOffset(hitX.roundToInt(), hitY.roundToInt())
+                                    }
+                                    .zIndex(if (isDragging) 40f else 18f)
+                                    .pointerInput(groupKey, hitTileId, boardVersion, tileSizePx) {
+                                        detectDragGestures(
+                                            onDragStart = {
+                                                draggingAnchorTileId = hitTileId
+                                                draggingGroupIds = group
+                                                dragDelta = Offset.Zero
+                                                hoverPosition = engine.getPositionOf(hitTileId)
+                                            },
+                                            onDragCancel = { resetDrag() },
+                                            onDragEnd = {
+                                                val anchorId = draggingAnchorTileId
+                                                val to = hoverPosition
+                                                if (
+                                                    anchorId != null &&
+                                                    to != null &&
+                                                    engine.getPositionOf(anchorId) != to
+                                                ) {
+                                                    onGroupDropped(anchorId, to)
+                                                }
+                                                resetDrag()
+                                            },
+                                            onDrag = { change, amount ->
+                                                change.consume()
+                                                dragDelta += amount
+                                                val anchorId = draggingAnchorTileId ?: hitTileId
+                                                hoverPosition = calculateHoverPosition(
+                                                    engine = engine,
+                                                    anchorTileId = anchorId,
+                                                    fallbackPosition = engine.getPositionOf(anchorId),
+                                                    dragDelta = dragDelta,
+                                                    tileSizePx = tileSizePx,
+                                                    gridSize = gridSize
+                                                )
+                                            }
+                                        )
+                                    }
+                            ) { /* Transparent hit target for this occupied group cell only. */ }
                         }
                     }
                 }

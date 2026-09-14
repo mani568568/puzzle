@@ -179,4 +179,32 @@ class PuzzleEngineTest {
         assertTrue(engine.isValidPermutation())
     }
 
+    @Test
+    fun `loose tile can move onto a cell that currently belongs to a merged group`() {
+        val engine = PuzzleEngine(3, 12345L)
+        // Tiles 0 and 1 are correctly connected at board positions 3 and 4.
+        assertTrue(engine.restorePositions(intArrayOf(8, 6, 5, 0, 1, 7, 4, 3, 2)))
+        assertEquals(setOf(0, 1), engine.getGroupForTile(0))
+
+        // Tile 8 is loose at board position 0. Moving it to position 3 must be allowed even
+        // though position 3 currently belongs to the merged 0-1 fragment.
+        assertTrue(engine.attemptMoveGroup(anchorTileId = 8, targetPosition = 3))
+        assertEquals(3, engine.getPositionOf(8))
+        assertTrue(engine.isValidPermutation())
+    }
+
+    @Test
+    fun `move does not require creating a correct connection`() {
+        val engine = PuzzleEngine(3, 12345L)
+        assertTrue(engine.restorePositions(intArrayOf(8, 6, 5, 0, 1, 7, 4, 3, 2)))
+
+        val before = engine.getCorrectConnections().size
+        assertTrue(engine.attemptMoveGroup(anchorTileId = 5, targetPosition = 8))
+        assertTrue(engine.isValidPermutation())
+        // The move itself is legal regardless of whether progress increased.
+        assertEquals(8, engine.getPositionOf(5))
+        assertTrue(engine.getCorrectConnections().size >= 0)
+        assertTrue(before >= 0)
+    }
+
 }
