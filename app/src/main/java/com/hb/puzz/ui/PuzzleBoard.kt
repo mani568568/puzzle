@@ -1,6 +1,7 @@
 package com.hb.puzz.ui
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -13,7 +14,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
-import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -26,9 +26,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
@@ -41,18 +44,17 @@ import kotlin.math.floor
 import kotlin.math.roundToInt
 
 /**
- * Fluid drag-and-drop picture board with rigid connected clusters.
+ * Picture puzzle board with rigid connected clusters.
  *
- * Correct neighbors visually fuse: their internal seam disappears and a shared glowing
- * outline is drawn only around the outside of the merged shape. Dragging any tile in a
- * connected cluster moves the whole cluster together.
+ * Loose tiles render independently. Once tiles become correctly connected they are rendered as
+ * one clipped image fragment (one Canvas / one image draw), which removes internal tile seams.
+ * Dragging any tile in that fragment moves the whole merged fragment together.
  */
 @Composable
 fun PuzzleBoard(
     engine: PuzzleEngine,
     boardVersion: Int,
     image: ImageBitmap,
-    connectedTileIds: Set<Int>,
     celebratingTileIds: Set<Int>,
     celebrationVersion: Int,
     onGroupDropped: (anchorTileId: Int, targetPosition: Int) -> Unit,
@@ -60,14 +62,11 @@ fun PuzzleBoard(
 ) {
     val gridSize = engine.gridSize
     val positions = remember(boardVersion) { engine.getCurrentPositions() }
-    val groupsByTile = remember(boardVersion) {
-        buildMap<Int, Set<Int>> {
-            engine.getConnectedGroups().forEach { group ->
-                val set = group.toSet()
-                group.forEach { put(it, set) }
-            }
-        }
+    val connectedGroups = remember(boardVersion) {
+        engine.getConnectedGroups().map { it.toSet() }
     }
+    val groupedTileIds = remember(connectedGroups) { connectedGroups.flatten().toSet() }
+
     val primary = MaterialTheme.colorScheme.primary
     val secondary = MaterialTheme.colorScheme.secondary
     val surface = MaterialTheme.colorScheme.surface
@@ -97,45 +96,70 @@ fun PuzzleBoard(
                 .background(surface, RoundedCornerShape(14.dp))
                 .border(1.5.dp, primary.copy(alpha = 0.48f), RoundedCornerShape(14.dp))
         ) {
-            // Preview the entire rigid cluster footprint, not just one destination cell.
+            // A single shared preview footprint keeps merged pieces looking like one object.
             val anchor = draggingAnchorTileId
             val hovered = hoverPosition
             if (anchor != null && hovered != null) {
                 val previewTargets = engine.getGroupMoveTargets(anchor, hovered)
-                previewTargets?.values?.forEach { previewPosition ->
-                    val row = previewPosition / gridSize
-                    val col = previewPosition % gridSize
-                    Box(
-                        modifier = Modifier
-                            .size(tileSize)
-                            .offset(x = tileSize * col, y = tileSize * row)
-                            .background(primary.copy(alpha = 0.09f))
-                            .border(1.4.dp, primary.copy(alpha = 0.48f))
-                    )
+                if (previewTargets != null) {
+                    val previewPositions = previewTargets.values.toSet()
+                    Canvas(modifier = Modifier.size(boardSize)) {
+                        val mask = Path()
+                        previewPositions.forEach { position ->
+                            val row = position / gridSize
+                            val col = position % gridSize
+                            val left = col * tileSizePx
+                            val top = row * tileSizePx
+                            mask.addRect(Rect(left, top, left + tileSizePx, top + tileSizePx))
+                        }
+                        drawPath(mask, secondary.copy(alpha = 0.10f))
+
+                        previewPositions.forEach { position ->
+                            val row = position / gridSize
+                            val col = position % gridSize
+                            val left = col * tileSizePx
+                            val top = row * tileSizePx
+                            val right = left + tileSizePx
+                            val bottom = top + tileSizePx
+                            val stroke = 2.dp.toPx()
+                            val color = primary.copy(alpha = 0.68f)
+
+                            if (row == 0 || position - gridSize !in previewPositions) {
+                                drawLine(color, Offset(left, top), Offset(right, top), stroke, StrokeCap.Round)
+                            }
+                            if (row == gridSize - 1 || position + gridSize !in previewPositions) {
+                                drawLine(color, Offset(left, bottom), Offset(right, bottom), stroke, StrokeCap.Round)
+                            }
+                            if (col == 0 || position - 1 !in previewPositions) {
+                                drawLine(color, Offset(left, top), Offset(left, bottom), stroke, StrokeCap.Round)
+                            }
+                            if (col == gridSize - 1 || position + 1 !in previewPositions) {
+                                drawLine(color, Offset(right, top), Offset(right, bottom), stroke, StrokeCap.Round)
+                            }
+                        }
+                    }
                 }
             }
 
+            // Render loose tiles independently.
             for (tileId in positions.indices) {
+                if (tileId in groupedTileIds) continue
                 val position = positions.indexOf(tileId)
                 if (position < 0) continue
 
-                key(tileId) {
+                key("tile-$tileId") {
                     val row = position / gridSize
                     val col = position % gridSize
                     val targetX = col * tileSizePx
                     val targetY = row * tileSizePx
-                    val tileGroup = groupsByTile[tileId] ?: setOf(tileId)
-                    val isMerged = tileGroup.size > 1
-                    val isDraggingGroup = tileId in draggingGroupIds
-                    val isDraggingAnchor = draggingAnchorTileId == tileId
-                    val isConnected = tileId in connectedTileIds
+                    val isDragging = tileId in draggingGroupIds
                     val isCelebrating = tileId in celebratingTileIds
                     val celebrationPulse = remember(tileId) { Animatable(1f) }
 
                     LaunchedEffect(celebrationVersion, isCelebrating) {
                         if (isCelebrating) {
                             celebrationPulse.snapTo(1f)
-                            celebrationPulse.animateTo(1.075f, tween(durationMillis = 115))
+                            celebrationPulse.animateTo(1.07f, tween(110))
                             celebrationPulse.animateTo(
                                 1f,
                                 spring(
@@ -148,176 +172,280 @@ fun PuzzleBoard(
 
                     val animatedX by animateFloatAsState(
                         targetValue = targetX,
-                        animationSpec = spring(
-                            dampingRatio = Spring.DampingRatioMediumBouncy,
-                            stiffness = Spring.StiffnessMediumLow
-                        ),
+                        animationSpec = tween(165, easing = FastOutSlowInEasing),
                         label = "tile-x-$tileId"
                     )
                     val animatedY by animateFloatAsState(
                         targetValue = targetY,
-                        animationSpec = spring(
-                            dampingRatio = Spring.DampingRatioMediumBouncy,
-                            stiffness = Spring.StiffnessMediumLow
-                        ),
+                        animationSpec = tween(165, easing = FastOutSlowInEasing),
                         label = "tile-y-$tileId"
                     )
                     val dragScale by animateFloatAsState(
-                        targetValue = if (isDraggingGroup) 1.045f else 1f,
-                        animationSpec = spring(stiffness = Spring.StiffnessMedium),
+                        targetValue = if (isDragging) 1.018f else 1f,
+                        animationSpec = tween(95),
                         label = "tile-scale-$tileId"
                     )
 
-                    val x = animatedX + if (isDraggingGroup) dragDelta.x else 0f
-                    val y = animatedY + if (isDraggingGroup) dragDelta.y else 0f
-                    val combinedScale = dragScale * celebrationPulse.value
-
-                    val groupPositionSet = remember(boardVersion, tileGroup) {
-                        tileGroup.mapNotNull { groupTile ->
-                            positions.indexOf(groupTile).takeIf { it >= 0 }
-                        }.toSet()
-                    }
-                    val hasLeft = col > 0 && (position - 1) in groupPositionSet
-                    val hasRight = col + 1 < gridSize && (position + 1) in groupPositionSet
-                    val hasTop = row > 0 && (position - gridSize) in groupPositionSet
-                    val hasBottom = row + 1 < gridSize && (position + gridSize) in groupPositionSet
-
-                    val tileShape = if (isMerged) RectangleShape else RoundedCornerShape(5.dp)
+                    // Slightly smoother than the previous heavy version, while still controlled.
+                    val visualDrag = if (isDragging) {
+                        Offset(dragDelta.x * 0.92f, dragDelta.y * 0.92f)
+                    } else Offset.Zero
 
                     Canvas(
                         modifier = Modifier
                             .size(tileSize)
-                            .offset { IntOffset(x.roundToInt(), y.roundToInt()) }
-                            .zIndex(
-                                when {
-                                    isDraggingGroup -> 20f
-                                    isCelebrating -> 12f
-                                    isMerged -> 4f
-                                    else -> 1f
-                                }
-                            )
+                            .offset {
+                                IntOffset(
+                                    (animatedX + visualDrag.x).roundToInt(),
+                                    (animatedY + visualDrag.y).roundToInt()
+                                )
+                            }
+                            .zIndex(if (isDragging) 20f else if (isCelebrating) 12f else 1f)
                             .graphicsLayer {
-                                scaleX = combinedScale
-                                scaleY = combinedScale
-                                shadowElevation = when {
-                                    isDraggingGroup -> 18.dp.toPx()
-                                    isCelebrating -> 9.dp.toPx()
-                                    else -> 0f
-                                }
-                                shape = tileShape
+                                val scale = dragScale * celebrationPulse.value
+                                scaleX = scale
+                                scaleY = scale
+                                shadowElevation = if (isDragging) 10.dp.toPx() else 0f
+                                shape = RoundedCornerShape(5.dp)
                                 clip = true
                             }
-                            .then(
-                                if (!isMerged) {
-                                    Modifier.border(
-                                        width = if (isDraggingAnchor) 2.4.dp else 0.45.dp,
-                                        color = if (isDraggingAnchor) primary else outline.copy(alpha = 0.26f),
-                                        shape = RoundedCornerShape(5.dp)
-                                    )
-                                } else Modifier
+                            .border(
+                                width = if (isDragging) 2.2.dp else 0.45.dp,
+                                color = if (isDragging) primary else outline.copy(alpha = 0.24f),
+                                shape = RoundedCornerShape(5.dp)
                             )
                             .pointerInput(tileId, position, tileSizePx, boardVersion) {
                                 detectDragGestures(
                                     onDragStart = {
                                         draggingAnchorTileId = tileId
-                                        draggingGroupIds = engine.getGroupForTile(tileId)
+                                        draggingGroupIds = setOf(tileId)
                                         dragDelta = Offset.Zero
                                         hoverPosition = position
                                     },
                                     onDragCancel = { resetDrag() },
                                     onDragEnd = {
-                                        val anchorTile = draggingAnchorTileId
                                         val to = hoverPosition
-                                        if (anchorTile != null && to != null && engine.getPositionOf(anchorTile) != to) {
-                                            onGroupDropped(anchorTile, to)
+                                        if (to != null && to != position) onGroupDropped(tileId, to)
+                                        resetDrag()
+                                    },
+                                    onDrag = { change, amount ->
+                                        change.consume()
+                                        dragDelta += amount
+                                        hoverPosition = calculateHoverPosition(
+                                            engine = engine,
+                                            anchorTileId = tileId,
+                                            fallbackPosition = position,
+                                            dragDelta = dragDelta,
+                                            tileSizePx = tileSizePx,
+                                            gridSize = gridSize
+                                        )
+                                    }
+                                )
+                            }
+                    ) {
+                        drawSingleTile(image, tileId, gridSize)
+                    }
+                }
+            }
+
+            // Render each correctly connected group once as one seamless image fragment.
+            connectedGroups.forEach { group ->
+                val groupKey = group.sorted().joinToString("-")
+                key("group-$groupKey") {
+                    val groupPositions = group.mapNotNull { tileId ->
+                        positions.indexOf(tileId).takeIf { it >= 0 }
+                    }
+                    val minRow = groupPositions.minOf { it / gridSize }
+                    val maxRow = groupPositions.maxOf { it / gridSize }
+                    val minCol = groupPositions.minOf { it % gridSize }
+                    val maxCol = groupPositions.maxOf { it % gridSize }
+                    val widthCells = maxCol - minCol + 1
+                    val heightCells = maxRow - minRow + 1
+                    val baseX = minCol * tileSizePx
+                    val baseY = minRow * tileSizePx
+                    val groupWidth = tileSize * widthCells
+                    val groupHeight = tileSize * heightCells
+                    val isDragging = group.any { it in draggingGroupIds }
+                    val isCelebrating = group.any { it in celebratingTileIds }
+                    val anchorTileId = draggingAnchorTileId?.takeIf { it in group }
+                    val celebrationPulse = remember(groupKey) { Animatable(1f) }
+
+                    LaunchedEffect(celebrationVersion, isCelebrating) {
+                        if (isCelebrating) {
+                            celebrationPulse.snapTo(1f)
+                            celebrationPulse.animateTo(1.045f, tween(110))
+                            celebrationPulse.animateTo(
+                                1f,
+                                spring(
+                                    dampingRatio = Spring.DampingRatioNoBouncy,
+                                    stiffness = Spring.StiffnessMedium
+                                )
+                            )
+                        }
+                    }
+
+                    val animatedX by animateFloatAsState(
+                        targetValue = baseX,
+                        animationSpec = tween(170, easing = FastOutSlowInEasing),
+                        label = "group-x-$groupKey"
+                    )
+                    val animatedY by animateFloatAsState(
+                        targetValue = baseY,
+                        animationSpec = tween(170, easing = FastOutSlowInEasing),
+                        label = "group-y-$groupKey"
+                    )
+                    val groupScale by animateFloatAsState(
+                        targetValue = if (isDragging) 1.012f else 1f,
+                        animationSpec = tween(95),
+                        label = "group-scale-$groupKey"
+                    )
+                    val visualDrag = if (isDragging) {
+                        Offset(dragDelta.x * 0.92f, dragDelta.y * 0.92f)
+                    } else Offset.Zero
+
+                    Canvas(
+                        modifier = Modifier
+                            .size(groupWidth, groupHeight)
+                            .offset {
+                                IntOffset(
+                                    (animatedX + visualDrag.x).roundToInt(),
+                                    (animatedY + visualDrag.y).roundToInt()
+                                )
+                            }
+                            .zIndex(if (isDragging) 30f else if (isCelebrating) 16f else 5f)
+                            .graphicsLayer {
+                                val scale = groupScale * celebrationPulse.value
+                                scaleX = scale
+                                scaleY = scale
+                                // Avoid a rectangular layer shadow around irregular merged shapes.
+                                shadowElevation = 0f
+                                clip = false
+                            }
+                            .pointerInput(groupKey, boardVersion, tileSizePx) {
+                                detectDragGestures(
+                                    onDragStart = { startOffset ->
+                                        // Pick the tile under the finger as the anchor when possible.
+                                        val localCol = floor(startOffset.x / tileSizePx).toInt().coerceIn(0, widthCells - 1)
+                                        val localRow = floor(startOffset.y / tileSizePx).toInt().coerceIn(0, heightCells - 1)
+                                        val boardPosition = (minRow + localRow) * gridSize + (minCol + localCol)
+                                        val touchedTile = positions.getOrNull(boardPosition)
+                                            ?.takeIf { it in group }
+                                            ?: group.first()
+                                        draggingAnchorTileId = touchedTile
+                                        draggingGroupIds = group
+                                        dragDelta = Offset.Zero
+                                        hoverPosition = engine.getPositionOf(touchedTile)
+                                    },
+                                    onDragCancel = { resetDrag() },
+                                    onDragEnd = {
+                                        val anchorId = draggingAnchorTileId
+                                        val to = hoverPosition
+                                        if (anchorId != null && to != null && engine.getPositionOf(anchorId) != to) {
+                                            onGroupDropped(anchorId, to)
                                         }
                                         resetDrag()
                                     },
                                     onDrag = { change, amount ->
                                         change.consume()
                                         dragDelta += amount
-
-                                        val anchorPosition = draggingAnchorTileId
-                                            ?.let { engine.getPositionOf(it) }
-                                            ?.takeIf { it >= 0 }
-                                            ?: position
-                                        val startRow = anchorPosition / gridSize
-                                        val startCol = anchorPosition % gridSize
-                                        val centerX = startCol * tileSizePx + tileSizePx / 2f + dragDelta.x
-                                        val centerY = startRow * tileSizePx + tileSizePx / 2f + dragDelta.y
-                                        val boardPixels = tileSizePx * gridSize
-                                        hoverPosition = if (
-                                            centerX < 0f || centerY < 0f ||
-                                            centerX >= boardPixels || centerY >= boardPixels
-                                        ) {
-                                            null
-                                        } else {
-                                            val targetCol = floor(centerX / tileSizePx).toInt()
-                                            val targetRow = floor(centerY / tileSizePx).toInt()
-                                            val candidate = targetRow * gridSize + targetCol
-                                            if (draggingAnchorTileId?.let {
-                                                    engine.getGroupMoveTargets(it, candidate) != null
-                                                } == true
-                                            ) candidate else null
-                                        }
+                                        val anchorId = draggingAnchorTileId ?: group.first()
+                                        hoverPosition = calculateHoverPosition(
+                                            engine = engine,
+                                            anchorTileId = anchorId,
+                                            fallbackPosition = engine.getPositionOf(anchorId),
+                                            dragDelta = dragDelta,
+                                            tileSizePx = tileSizePx,
+                                            gridSize = gridSize
+                                        )
                                     }
                                 )
                             }
                     ) {
-                        val sourceRow = tileId / gridSize
-                        val sourceCol = tileId % gridSize
-                        val srcLeft = sourceCol * image.width / gridSize
-                        val srcTop = sourceRow * image.height / gridSize
-                        val srcRight = (sourceCol + 1) * image.width / gridSize
-                        val srcBottom = (sourceRow + 1) * image.height / gridSize
+                        val occupiedPositions = group.map { positions.indexOf(it) }.toSet()
+                        val mask = Path()
+                        occupiedPositions.forEach { boardPosition ->
+                            val localRow = boardPosition / gridSize - minRow
+                            val localCol = boardPosition % gridSize - minCol
+                            val left = localCol * (size.width / widthCells)
+                            val top = localRow * (size.height / heightCells)
+                            val right = (localCol + 1) * (size.width / widthCells)
+                            val bottom = (localRow + 1) * (size.height / heightCells)
+                            mask.addRect(Rect(left, top, right, bottom))
+                        }
 
-                        drawImage(
-                            image = image,
-                            srcOffset = IntOffset(srcLeft, srcTop),
-                            srcSize = IntSize(srcRight - srcLeft, srcBottom - srcTop),
-                            dstOffset = IntOffset.Zero,
-                            dstSize = IntSize(size.width.roundToInt(), size.height.roundToInt()),
-                            filterQuality = FilterQuality.Medium
-                        )
+                        // Because all tiles in a connected group preserve their original relative
+                        // orientation, one source rectangle can be drawn across the whole group.
+                        // Drawing once (rather than one bitmap slice per tile) removes inner seams.
+                        val sourceMinRow = group.minOf { it / gridSize }
+                        val sourceMaxRow = group.maxOf { it / gridSize }
+                        val sourceMinCol = group.minOf { it % gridSize }
+                        val sourceMaxCol = group.maxOf { it % gridSize }
+                        val srcLeft = sourceMinCol * image.width / gridSize
+                        val srcTop = sourceMinRow * image.height / gridSize
+                        val srcRight = (sourceMaxCol + 1) * image.width / gridSize
+                        val srcBottom = (sourceMaxRow + 1) * image.height / gridSize
 
-                        if (isMerged) {
-                            // Two-layer shared outline: soft peach glow + crisp teal/peach edge.
-                            // Internal edges are intentionally omitted so the block reads as one image.
-                            val glowWidth = if (isCelebrating) 8.dp.toPx() else 5.dp.toPx()
-                            val edgeWidth = if (isCelebrating) 3.2.dp.toPx() else 1.9.dp.toPx()
-                            val glowColor = secondary.copy(alpha = if (isCelebrating) 0.52f else 0.24f)
-                            val edgeColor = if (isCelebrating) secondary else primary.copy(alpha = 0.92f)
-                            val glowInset = glowWidth / 2f
-                            val edgeInset = edgeWidth / 2f
+                        clipPath(mask) {
+                            drawImage(
+                                image = image,
+                                srcOffset = IntOffset(srcLeft, srcTop),
+                                srcSize = IntSize(srcRight - srcLeft, srcBottom - srcTop),
+                                dstOffset = IntOffset.Zero,
+                                dstSize = IntSize(size.width.roundToInt(), size.height.roundToInt()),
+                                filterQuality = FilterQuality.High
+                            )
+                        }
 
-                            fun edge(start: Offset, end: Offset, insetStart: Offset, insetEnd: Offset) {
-                                drawLine(glowColor, start + insetStart, end + insetEnd, glowWidth, StrokeCap.Round)
-                                drawLine(edgeColor, start + insetStart * (edgeInset / glowInset), end + insetEnd * (edgeInset / glowInset), edgeWidth, StrokeCap.Round)
+                        // Shared outer contour only — no internal grid lines at all.
+                        val glowWidth = when {
+                            isCelebrating -> 7.dp.toPx()
+                            isDragging -> 5.5.dp.toPx()
+                            else -> 4.dp.toPx()
+                        }
+                        val edgeWidth = when {
+                            isCelebrating -> 3.dp.toPx()
+                            isDragging -> 2.4.dp.toPx()
+                            else -> 1.7.dp.toPx()
+                        }
+                        val glowColor = when {
+                            isCelebrating -> secondary.copy(alpha = 0.48f)
+                            isDragging -> primary.copy(alpha = 0.30f)
+                            else -> secondary.copy(alpha = 0.20f)
+                        }
+                        val edgeColor = when {
+                            isCelebrating -> secondary
+                            isDragging -> primary
+                            else -> primary.copy(alpha = 0.88f)
+                        }
+
+                        occupiedPositions.forEach { boardPosition ->
+                            val boardRow = boardPosition / gridSize
+                            val boardCol = boardPosition % gridSize
+                            val localRow = boardRow - minRow
+                            val localCol = boardCol - minCol
+                            val cellW = size.width / widthCells
+                            val cellH = size.height / heightCells
+                            val left = localCol * cellW
+                            val top = localRow * cellH
+                            val right = left + cellW
+                            val bottom = top + cellH
+
+                            fun outerEdge(start: Offset, end: Offset) {
+                                drawLine(glowColor, start, end, glowWidth, StrokeCap.Round)
+                                drawLine(edgeColor, start, end, edgeWidth, StrokeCap.Round)
                             }
 
-                            if (!hasTop) {
-                                edge(
-                                    Offset(0f, 0f), Offset(size.width, 0f),
-                                    Offset(0f, glowInset), Offset(0f, glowInset)
-                                )
+                            if (boardRow == 0 || boardPosition - gridSize !in occupiedPositions) {
+                                outerEdge(Offset(left, top), Offset(right, top))
                             }
-                            if (!hasBottom) {
-                                edge(
-                                    Offset(0f, size.height), Offset(size.width, size.height),
-                                    Offset(0f, -glowInset), Offset(0f, -glowInset)
-                                )
+                            if (boardRow == gridSize - 1 || boardPosition + gridSize !in occupiedPositions) {
+                                outerEdge(Offset(left, bottom), Offset(right, bottom))
                             }
-                            if (!hasLeft) {
-                                edge(
-                                    Offset(0f, 0f), Offset(0f, size.height),
-                                    Offset(glowInset, 0f), Offset(glowInset, 0f)
-                                )
+                            if (boardCol == 0 || boardPosition - 1 !in occupiedPositions) {
+                                outerEdge(Offset(left, top), Offset(left, bottom))
                             }
-                            if (!hasRight) {
-                                edge(
-                                    Offset(size.width, 0f), Offset(size.width, size.height),
-                                    Offset(-glowInset, 0f), Offset(-glowInset, 0f)
-                                )
+                            if (boardCol == gridSize - 1 || boardPosition + 1 !in occupiedPositions) {
+                                outerEdge(Offset(right, top), Offset(right, bottom))
                             }
                         }
                     }
@@ -325,4 +453,53 @@ fun PuzzleBoard(
             }
         }
     }
+}
+
+private fun calculateHoverPosition(
+    engine: PuzzleEngine,
+    anchorTileId: Int,
+    fallbackPosition: Int,
+    dragDelta: Offset,
+    tileSizePx: Float,
+    gridSize: Int
+): Int? {
+    val anchorPosition = engine.getPositionOf(anchorTileId).takeIf { it >= 0 } ?: fallbackPosition
+    if (anchorPosition < 0) return null
+
+    val startRow = anchorPosition / gridSize
+    val startCol = anchorPosition % gridSize
+    val centerX = startCol * tileSizePx + tileSizePx / 2f + dragDelta.x
+    val centerY = startRow * tileSizePx + tileSizePx / 2f + dragDelta.y
+    val boardPixels = tileSizePx * gridSize
+
+    if (centerX < 0f || centerY < 0f || centerX >= boardPixels || centerY >= boardPixels) {
+        return null
+    }
+
+    val targetCol = floor(centerX / tileSizePx).toInt()
+    val targetRow = floor(centerY / tileSizePx).toInt()
+    val candidate = targetRow * gridSize + targetCol
+    return candidate.takeIf { engine.getGroupMoveTargets(anchorTileId, it) != null }
+}
+
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawSingleTile(
+    image: ImageBitmap,
+    tileId: Int,
+    gridSize: Int
+) {
+    val sourceRow = tileId / gridSize
+    val sourceCol = tileId % gridSize
+    val srcLeft = sourceCol * image.width / gridSize
+    val srcTop = sourceRow * image.height / gridSize
+    val srcRight = (sourceCol + 1) * image.width / gridSize
+    val srcBottom = (sourceRow + 1) * image.height / gridSize
+
+    drawImage(
+        image = image,
+        srcOffset = IntOffset(srcLeft, srcTop),
+        srcSize = IntSize(srcRight - srcLeft, srcBottom - srcTop),
+        dstOffset = IntOffset.Zero,
+        dstSize = IntSize(size.width.roundToInt(), size.height.roundToInt()),
+        filterQuality = FilterQuality.High
+    )
 }

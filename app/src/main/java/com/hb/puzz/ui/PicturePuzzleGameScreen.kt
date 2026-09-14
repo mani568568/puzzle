@@ -5,6 +5,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -90,18 +91,15 @@ fun PicturePuzzleGameScreen(
     var imageLoading by remember(level.id, imageSource) { mutableStateOf(true) }
     var refreshToken by remember(level.id, imageSource) { mutableIntStateOf(0) }
 
-    var connectedTileIds by remember(level.id) { mutableStateOf(emptySet<Int>()) }
     var connectionCount by remember(level.id) { mutableIntStateOf(0) }
     var celebratingTileIds by remember(level.id) { mutableStateOf(emptySet<Int>()) }
     var celebrationMessage by remember(level.id) { mutableStateOf<String?>(null) }
     var celebrationVersion by remember(level.id) { mutableIntStateOf(0) }
+    var completionDetailsVisible by remember(level.id) { mutableStateOf(false) }
 
     fun refreshConnectionState() {
         val connections = engine.getCorrectConnections()
         connectionCount = connections.size
-        connectedTileIds = connections
-            .flatMap { listOf(it.firstTileId, it.secondTileId) }
-            .toSet()
     }
 
     DisposableEffect(feedback) {
@@ -129,6 +127,15 @@ fun PicturePuzzleGameScreen(
             imageRepository.loadLevelImage(level, imageSource)
         }
         imageLoading = false
+    }
+
+    // Let the player enjoy the fully restored artwork before showing results.
+    LaunchedEffect(isSolved, puzzleImage) {
+        completionDetailsVisible = false
+        if (isSolved && puzzleImage != null) {
+            delay(2_000)
+            completionDetailsVisible = true
+        }
     }
 
     fun showConnectionCelebration(newTileIds: Set<Int>, newConnectionCount: Int) {
@@ -163,6 +170,7 @@ fun PicturePuzzleGameScreen(
         isSolved = false
         celebratingTileIds = emptySet()
         celebrationMessage = null
+        completionDetailsVisible = false
         refreshConnectionState()
         boardVersion++
         scope.launch { settings.saveSession(level.id, engine.getCurrentPositions(), 0) }
@@ -204,25 +212,26 @@ fun PicturePuzzleGameScreen(
             }
         }
 
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 2.dp),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Surface(
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.72f)
+        if (!isSolved) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 2.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "Connections $connectionCount / $totalConnections",
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer
-                )
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.72f)
+                ) {
+                    Text(
+                        text = "Connections $connectionCount / $totalConnections",
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                    )
+                }
             }
+            Spacer(Modifier.height(3.dp))
         }
-
-        Spacer(Modifier.height(3.dp))
 
         when {
             !initialized || imageLoading || puzzleImage == null -> Box(
@@ -248,7 +257,6 @@ fun PicturePuzzleGameScreen(
                         engine = engine,
                         boardVersion = boardVersion,
                         image = loaded.bitmap.asImageBitmap(),
-                        connectedTileIds = connectedTileIds,
                         celebratingTileIds = celebratingTileIds,
                         celebrationVersion = celebrationVersion,
                         onGroupDropped = { anchorTileId, targetPosition ->
@@ -261,9 +269,6 @@ fun PicturePuzzleGameScreen(
                                 val gainedProgress = afterConnections.size > beforeConnections.size
 
                                 connectionCount = afterConnections.size
-                                connectedTileIds = afterConnections
-                                    .flatMap { listOf(it.firstTileId, it.secondTileId) }
-                                    .toSet()
 
                                 val solvedNow = engine.isSolved()
                                 isSolved = solvedNow
@@ -307,38 +312,30 @@ fun PicturePuzzleGameScreen(
 
             else -> {
                 val loaded = puzzleImage!!
+                val score = calculatePuzzleScore(
+                    gridSize = level.gridSize,
+                    totalConnections = totalConnections,
+                    moves = moveCount
+                )
                 Box(modifier = Modifier.fillMaxWidth().aspectRatio(1f)) {
+                    // For the first two seconds after the final snap, this is intentionally the
+                    // only content over the puzzle area: the player gets a clean image reveal.
                     Image(
                         bitmap = loaded.bitmap.asImageBitmap(),
                         contentDescription = "Completed level artwork",
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop
                     )
-                    Column(
-                        modifier = Modifier
-                            .align(Alignment.Center)
-                            .background(
-                                MaterialTheme.colorScheme.surface.copy(alpha = 0.93f),
-                                RoundedCornerShape(22.dp)
-                            )
-                            .padding(horizontal = 28.dp, vertical = 22.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text("🎉 Puzzle Solved!", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                        Spacer(Modifier.height(8.dp))
-                        Text("Completed in $moveCount moves")
-                        Text(
-                            "$totalConnections / $totalConnections connections",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Spacer(Modifier.height(16.dp))
-                        if (level.id < PuzzleLevel.maxLevelId) {
-                            Button(onClick = { onNextLevel(level.id + 1) }) { Text("Next Level") }
-                        } else {
-                            Button(onClick = onHome) { Text("Finish") }
-                        }
-                    }
+
+                    CompletionResultOverlay(
+                        visible = completionDetailsVisible,
+                        score = score,
+                        moves = moveCount,
+                        isLastLevel = level.id >= PuzzleLevel.maxLevelId,
+                        onNext = { onNextLevel(level.id + 1) },
+                        onFinish = onHome,
+                        modifier = Modifier.align(Alignment.Center)
+                    )
                 }
             }
         }
@@ -373,12 +370,14 @@ fun PicturePuzzleGameScreen(
             }
         }
 
-        OutlinedButton(
-            onClick = { restart() },
-            enabled = initialized && !imageLoading,
-            modifier = Modifier.fillMaxWidth(0.72f).padding(top = 6.dp, bottom = 8.dp)
-        ) {
-            Text("Shuffle & Restart")
+        if (!isSolved) {
+            OutlinedButton(
+                onClick = { restart() },
+                enabled = initialized && !imageLoading,
+                modifier = Modifier.fillMaxWidth(0.72f).padding(top = 6.dp, bottom = 8.dp)
+            ) {
+                Text("Shuffle & Restart")
+            }
         }
     }
 
@@ -400,6 +399,68 @@ fun PicturePuzzleGameScreen(
         )
     }
 }
+private fun calculatePuzzleScore(
+    gridSize: Int,
+    totalConnections: Int,
+    moves: Int
+): Int {
+    val baseScore = gridSize * gridSize * 250 + totalConnections * 100
+    val movePenalty = moves * 15
+    return (baseScore - movePenalty).coerceAtLeast(gridSize * gridSize * 50)
+}
+
+@Composable
+private fun CompletionResultOverlay(
+    visible: Boolean,
+    score: Int,
+    moves: Int,
+    isLastLevel: Boolean,
+    onNext: () -> Unit,
+    onFinish: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    AnimatedVisibility(
+        visible = visible,
+        modifier = modifier,
+        enter = fadeIn(animationSpec = tween(260)) + scaleIn(initialScale = 0.90f),
+        exit = fadeOut()
+    ) {
+        Surface(
+            shape = RoundedCornerShape(24.dp),
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
+            tonalElevation = 10.dp,
+            shadowElevation = 12.dp
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 30.dp, vertical = 24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    "✨ Beautiful!",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    text = score.toString(),
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Text("SCORE", style = MaterialTheme.typography.labelMedium)
+                Spacer(Modifier.height(8.dp))
+                Text("Solved in $moves moves", style = MaterialTheme.typography.bodyMedium)
+                Spacer(Modifier.height(18.dp))
+                if (!isLastLevel) {
+                    Button(onClick = onNext) { Text("Next Level") }
+                } else {
+                    Button(onClick = onFinish) { Text("Finish") }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun CelebrationBanner(
     message: String?,
