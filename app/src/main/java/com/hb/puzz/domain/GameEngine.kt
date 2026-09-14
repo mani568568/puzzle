@@ -62,19 +62,8 @@ class GameEngine(
             return false
         }
 
-        // Create new board with placed piece
-        val placedCells = piece.withOffset(x, y)
-        val newCells = _state.board.cells.toMutableMap().apply {
-            placedCells.forEach { cell ->
-                put(cell, piece.color)
-            }
-        }
-        
-        val newBoard = GameBoard(
-            width = _state.board.width,
-            height = _state.board.height,
-            cells = newCells
-        )
+        // Place through GameBoard so validation and mutation rules stay in one place.
+        val newBoard = _state.board.placePiece(piece, x, y) ?: return false
 
         // Get completed lines
         val (rowsToClear, colsToClear) = newBoard.getCompletedLines()
