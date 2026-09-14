@@ -35,7 +35,8 @@ data class PuzzleSession(
     val remainingSeconds: Int? = null,
     val clockMode: PuzzleClockMode = PuzzleClockMode.COUNTDOWN,
     val stopwatchElapsedSeconds: Int = 0,
-    val timerStarted: Boolean = false
+    val timerStarted: Boolean = false,
+    val totalChallengeSeconds: Int? = null
 )
 
 /** Single source of truth for picture-puzzle progress and user preferences. */
@@ -58,6 +59,7 @@ class GameSettings(context: Context) {
         private val KEY_SAVED_CLOCK_MODE = stringPreferencesKey("saved_clock_mode")
         private val KEY_SAVED_STOPWATCH_SECONDS = intPreferencesKey("saved_stopwatch_seconds")
         private val KEY_SAVED_TIMER_STARTED = booleanPreferencesKey("saved_timer_started")
+        private val KEY_SAVED_TOTAL_CHALLENGE_SECONDS = intPreferencesKey("saved_total_challenge_seconds")
 
         private fun encodePositions(positions: IntArray): String = positions.joinToString(",")
 
@@ -93,7 +95,8 @@ class GameSettings(context: Context) {
             remainingSeconds = prefs[KEY_SAVED_REMAINING_SECONDS],
             clockMode = prefs[KEY_SAVED_CLOCK_MODE],
             stopwatchElapsedSeconds = prefs[KEY_SAVED_STOPWATCH_SECONDS] ?: 0,
-            timerStarted = prefs[KEY_SAVED_TIMER_STARTED] ?: false
+            timerStarted = prefs[KEY_SAVED_TIMER_STARTED] ?: false,
+            totalChallengeSeconds = prefs[KEY_SAVED_TOTAL_CHALLENGE_SECONDS]
         )
     }
 
@@ -107,7 +110,8 @@ class GameSettings(context: Context) {
             remainingSeconds = prefs[KEY_SAVED_REMAINING_SECONDS],
             clockMode = prefs[KEY_SAVED_CLOCK_MODE],
             stopwatchElapsedSeconds = prefs[KEY_SAVED_STOPWATCH_SECONDS] ?: 0,
-            timerStarted = prefs[KEY_SAVED_TIMER_STARTED] ?: false
+            timerStarted = prefs[KEY_SAVED_TIMER_STARTED] ?: false,
+            totalChallengeSeconds = prefs[KEY_SAVED_TOTAL_CHALLENGE_SECONDS]
         )
     }
 
@@ -119,7 +123,8 @@ class GameSettings(context: Context) {
         remainingSeconds: Int?,
         clockMode: String?,
         stopwatchElapsedSeconds: Int,
-        timerStarted: Boolean
+        timerStarted: Boolean,
+        totalChallengeSeconds: Int?
     ): PuzzleSession? {
         val id = levelId ?: return null
         val level = PuzzleLevel.getLevel(id) ?: return null
@@ -142,7 +147,8 @@ class GameSettings(context: Context) {
             remainingSeconds?.coerceAtLeast(0),
             PuzzleClockMode.fromStored(clockMode),
             stopwatchElapsedSeconds.coerceAtLeast(0),
-            timerStarted
+            timerStarted,
+            totalChallengeSeconds?.coerceAtLeast(0)
         )
     }
 
@@ -154,7 +160,8 @@ class GameSettings(context: Context) {
         remainingSeconds: Int? = null,
         clockMode: PuzzleClockMode = PuzzleClockMode.COUNTDOWN,
         stopwatchElapsedSeconds: Int = 0,
-        timerStarted: Boolean = false
+        timerStarted: Boolean = false,
+        totalChallengeSeconds: Int? = null
     ) {
         val level = PuzzleLevel.getLevel(levelId) ?: return
         if (!level.acceptsGridSize(gridSize)) return
@@ -169,6 +176,11 @@ class GameSettings(context: Context) {
             prefs[KEY_SAVED_CLOCK_MODE] = clockMode.storedValue
             prefs[KEY_SAVED_STOPWATCH_SECONDS] = stopwatchElapsedSeconds.coerceAtLeast(0)
             prefs[KEY_SAVED_TIMER_STARTED] = timerStarted
+            if (totalChallengeSeconds != null) {
+                prefs[KEY_SAVED_TOTAL_CHALLENGE_SECONDS] = totalChallengeSeconds.coerceAtLeast(0)
+            } else {
+                prefs.remove(KEY_SAVED_TOTAL_CHALLENGE_SECONDS)
+            }
             if (remainingSeconds != null) {
                 prefs[KEY_SAVED_REMAINING_SECONDS] = remainingSeconds.coerceAtLeast(0)
             } else {
@@ -187,6 +199,7 @@ class GameSettings(context: Context) {
             prefs.remove(KEY_SAVED_CLOCK_MODE)
             prefs.remove(KEY_SAVED_STOPWATCH_SECONDS)
             prefs.remove(KEY_SAVED_TIMER_STARTED)
+            prefs.remove(KEY_SAVED_TOTAL_CHALLENGE_SECONDS)
         }
     }
 
@@ -261,6 +274,7 @@ class GameSettings(context: Context) {
             prefs.remove(KEY_SAVED_CLOCK_MODE)
             prefs.remove(KEY_SAVED_STOPWATCH_SECONDS)
             prefs.remove(KEY_SAVED_TIMER_STARTED)
+            prefs.remove(KEY_SAVED_TOTAL_CHALLENGE_SECONDS)
         }
     }
 }

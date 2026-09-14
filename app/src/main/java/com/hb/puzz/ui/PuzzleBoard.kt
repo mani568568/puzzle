@@ -2,6 +2,7 @@ package com.hb.puzz.ui
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -44,7 +45,10 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import com.hb.puzz.domain.PuzzleEngine
+import kotlinx.coroutines.launch
+import kotlin.math.PI
 import kotlin.math.floor
+import kotlin.math.sin
 import kotlin.math.roundToInt
 
 /**
@@ -75,8 +79,8 @@ fun PuzzleBoard(
     val secondary = MaterialTheme.colorScheme.secondary
     val surface = MaterialTheme.colorScheme.surface
     val outline = MaterialTheme.colorScheme.outline
-    val gridBorder = Color(0xFFE0B879)
-    val tileDivider = Color(0xFFE9DCCB)
+    val gridBorder = Color(0xFFC9A064)
+    val tileDivider = Color.White
     val dragAccent = Color(0xFF67C9D7)
     val density = LocalDensity.current
 
@@ -104,8 +108,8 @@ fun PuzzleBoard(
             modifier = Modifier
                 .width(boardWidth)
                 .height(boardHeight)
-                .background(Color(0xFFFFF7EA), RoundedCornerShape(10.dp))
-                .border(3.dp, gridBorder, RoundedCornerShape(10.dp))
+                .background(Color(0xFFFFFBF5), RoundedCornerShape(10.dp))
+                .border(2.5.dp, gridBorder, RoundedCornerShape(10.dp))
         ) {
             // A single shared preview footprint keeps merged pieces looking like one object.
             val anchor = draggingAnchorTileId
@@ -221,10 +225,12 @@ fun PuzzleBoard(
                                 shape = RectangleShape
                                 clip = true
                             }
-                            .border(
-                                width = if (isDragging) 2.0.dp else 0.8.dp,
-                                color = if (isDragging) dragAccent else tileDivider.copy(alpha = 0.88f),
-                                shape = RectangleShape
+                            .then(
+                                if (isDragging) {
+                                    Modifier.border(2.dp, dragAccent, RectangleShape)
+                                } else {
+                                    Modifier
+                                }
                             )
                             .pointerInput(tileId, position, tileWidthPx, tileHeightPx, boardVersion) {
                                 detectDragGestures(
@@ -261,6 +267,37 @@ fun PuzzleBoard(
                 }
             }
 
+            // Draw one shared white grid after the loose tiles. Using a single overlay avoids
+            // doubled/misaligned borders from neighboring tiles. Correctly merged groups are
+            // rendered after this overlay, so their internal white seams disappear naturally.
+            Canvas(
+                modifier = Modifier
+                    .width(boardWidth)
+                    .height(boardHeight)
+                    .zIndex(3f)
+            ) {
+                val lineWidth = 1.35.dp.toPx()
+                val divider = tileDivider.copy(alpha = 0.98f)
+                for (column in 1 until gridSize) {
+                    val x = column * tileWidthPx
+                    drawLine(
+                        color = divider,
+                        start = Offset(x, 0f),
+                        end = Offset(x, size.height),
+                        strokeWidth = lineWidth
+                    )
+                }
+                for (row in 1 until gridSize) {
+                    val y = row * tileHeightPx
+                    drawLine(
+                        color = divider,
+                        start = Offset(0f, y),
+                        end = Offset(size.width, y),
+                        strokeWidth = lineWidth
+                    )
+                }
+            }
+
             // Render each correctly connected group once as one seamless image fragment.
             connectedGroups.forEach { group ->
                 val groupKey = group.sorted().joinToString("-")
@@ -282,9 +319,17 @@ fun PuzzleBoard(
                     val isCelebrating = group.any { it in celebratingTileIds }
                     val anchorTileId = draggingAnchorTileId?.takeIf { it in group }
                     val celebrationPulse = remember(groupKey) { Animatable(1f) }
+                    val pixieDustProgress = remember(groupKey) { Animatable(1f) }
 
                     LaunchedEffect(celebrationVersion, isCelebrating) {
                         if (isCelebrating) {
+                            pixieDustProgress.snapTo(0f)
+                            launch {
+                                pixieDustProgress.animateTo(
+                                    1f,
+                                    tween(durationMillis = 1_280, easing = LinearEasing)
+                                )
+                            }
                             celebrationPulse.snapTo(1f)
                             celebrationPulse.animateTo(1.045f, tween(110))
                             celebrationPulse.animateTo(
@@ -392,6 +437,10 @@ fun PuzzleBoard(
                             else -> gridBorder.copy(alpha = 0.96f)
                         }
 
+                        // Build the outer perimeter once so the stable border and the magical
+                        // merge trail are rendered from exactly the same geometry. The third value
+                        // is a small inward normal, keeping sparkles inside the cluster bounds.
+                        val outerEdges = mutableListOf<Triple<Offset, Offset, Offset>>()
                         occupiedPositions.forEach { boardPosition ->
                             val boardRow = boardPosition / gridSize
                             val boardCol = boardPosition % gridSize
@@ -404,22 +453,87 @@ fun PuzzleBoard(
                             val right = left + cellW
                             val bottom = top + cellH
 
-                            fun outerEdge(start: Offset, end: Offset) {
-                                drawLine(glowColor, start, end, glowWidth, StrokeCap.Round)
-                                drawLine(edgeColor, start, end, edgeWidth, StrokeCap.Round)
-                            }
-
                             if (boardRow == 0 || boardPosition - gridSize !in occupiedPositions) {
-                                outerEdge(Offset(left, top), Offset(right, top))
+                                outerEdges += Triple(Offset(left, top), Offset(right, top), Offset(0f, 1f))
                             }
                             if (boardRow == gridSize - 1 || boardPosition + gridSize !in occupiedPositions) {
-                                outerEdge(Offset(left, bottom), Offset(right, bottom))
+                                outerEdges += Triple(Offset(left, bottom), Offset(right, bottom), Offset(0f, -1f))
                             }
                             if (boardCol == 0 || boardPosition - 1 !in occupiedPositions) {
-                                outerEdge(Offset(left, top), Offset(left, bottom))
+                                outerEdges += Triple(Offset(left, top), Offset(left, bottom), Offset(1f, 0f))
                             }
                             if (boardCol == gridSize - 1 || boardPosition + 1 !in occupiedPositions) {
-                                outerEdge(Offset(right, top), Offset(right, bottom))
+                                outerEdges += Triple(Offset(right, top), Offset(right, bottom), Offset(-1f, 0f))
+                            }
+                        }
+
+                        outerEdges.forEach { (start, end, _) ->
+                            drawLine(glowColor, start, end, glowWidth, StrokeCap.Round)
+                            drawLine(edgeColor, start, end, edgeWidth, StrokeCap.Round)
+                        }
+
+                        // Pixie-dust merge moment: a warm-gold shimmer races around every exposed
+                        // edge while tiny aqua/white/gold particles twinkle just inside the block.
+                        // It only runs for newly-created/expanded groups; the normal merged outline
+                        // remains quiet after the effect settles.
+                        if (isCelebrating) {
+                            val progress = pixieDustProgress.value.coerceIn(0f, 1f)
+                            val envelope = sin(progress.toDouble() * PI).toFloat().coerceAtLeast(0f)
+                            val shimmer = Color(0xFFFFD66B).copy(alpha = 0.28f + envelope * 0.62f)
+                            val sparkleColors = listOf(
+                                Color(0xFFFFE58A),
+                                Color(0xFF8FE7E8),
+                                Color.White,
+                                Color(0xFFFFC7E7)
+                            )
+                            val inward = 3.2.dp.toPx()
+
+                            outerEdges.forEachIndexed { edgeIndex, edge ->
+                                val (start, end, normal) = edge
+                                drawLine(
+                                    color = shimmer,
+                                    start = start,
+                                    end = end,
+                                    strokeWidth = edgeWidth + 1.7.dp.toPx(),
+                                    cap = StrokeCap.Round
+                                )
+
+                                repeat(4) { particleIndex ->
+                                    val phase = (progress * 1.85f + edgeIndex * 0.173f + particleIndex * 0.229f) % 1f
+                                    val dx = end.x - start.x
+                                    val dy = end.y - start.y
+                                    val wave = sin((progress * 9f + edgeIndex + particleIndex * 0.7f).toDouble() * PI).toFloat()
+                                    val center = Offset(
+                                        x = start.x + dx * phase + normal.x * inward * (0.65f + 0.35f * wave),
+                                        y = start.y + dy * phase + normal.y * inward * (0.65f + 0.35f * wave)
+                                    )
+                                    val twinkle = (0.58f + 0.42f * sin((progress * 13f + particleIndex).toDouble() * PI).toFloat()).coerceIn(0.15f, 1f)
+                                    val radius = (1.25f + (particleIndex % 3) * 0.72f) * density.density
+                                    val color = sparkleColors[(edgeIndex + particleIndex) % sparkleColors.size]
+                                    drawCircle(
+                                        color = color.copy(alpha = envelope * twinkle),
+                                        radius = radius,
+                                        center = center
+                                    )
+
+                                    if ((edgeIndex + particleIndex) % 3 == 0 && envelope > 0.18f) {
+                                        val ray = radius * 1.8f
+                                        drawLine(
+                                            Color.White.copy(alpha = envelope * 0.82f),
+                                            Offset(center.x - ray, center.y),
+                                            Offset(center.x + ray, center.y),
+                                            0.8.dp.toPx(),
+                                            StrokeCap.Round
+                                        )
+                                        drawLine(
+                                            Color.White.copy(alpha = envelope * 0.82f),
+                                            Offset(center.x, center.y - ray),
+                                            Offset(center.x, center.y + ray),
+                                            0.8.dp.toPx(),
+                                            StrokeCap.Round
+                                        )
+                                    }
+                                }
                             }
                         }
                     }

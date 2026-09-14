@@ -10,6 +10,7 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -33,6 +34,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.AlertDialog
@@ -110,6 +112,7 @@ fun PicturePuzzleGameScreen(
     var isSolved by remember(level.id, activeGridSize) { mutableStateOf(false) }
     var timeExpired by remember(level.id, activeGridSize) { mutableStateOf(false) }
     var remainingSeconds by remember(level.id, activeGridSize) { mutableIntStateOf(initialChallengeSeconds) }
+    var totalChallengeSeconds by remember(level.id, activeGridSize) { mutableIntStateOf(initialChallengeSeconds) }
     var timerStarted by remember(level.id, activeGridSize) { mutableStateOf(false) }
     var timerRunning by remember(level.id, activeGridSize) { mutableStateOf(false) }
     var timerExpanded by remember(level.id, activeGridSize) { mutableStateOf(false) }
@@ -140,6 +143,8 @@ fun PicturePuzzleGameScreen(
         if (saved?.levelId == level.id && saved.gridSize == activeGridSize && engine.restorePositions(saved.positions)) {
             moveCount = saved.moveCount
             remainingSeconds = saved.remainingSeconds ?: initialChallengeSeconds
+            totalChallengeSeconds = (saved.totalChallengeSeconds ?: maxOf(initialChallengeSeconds, remainingSeconds))
+                .coerceAtLeast(remainingSeconds)
             stopwatchElapsedSeconds = 0
             clockMode = PuzzleClockMode.COUNTDOWN
             timerStarted = saved.timerStarted
@@ -149,6 +154,7 @@ fun PicturePuzzleGameScreen(
             timeExpired = timerStarted && remainingSeconds <= 0 && !isSolved
         } else {
             remainingSeconds = initialChallengeSeconds
+            totalChallengeSeconds = initialChallengeSeconds
             stopwatchElapsedSeconds = 0
             clockMode = PuzzleClockMode.COUNTDOWN
             timerStarted = false
@@ -162,7 +168,8 @@ fun PicturePuzzleGameScreen(
                 remainingSeconds,
                 clockMode,
                 stopwatchElapsedSeconds,
-                timerStarted
+                timerStarted,
+                totalChallengeSeconds
             )
         }
         refreshConnectionState()
@@ -192,7 +199,7 @@ fun PicturePuzzleGameScreen(
                 if (remainingSeconds % 5 == 0) {
                     settings.saveSession(
                         level.id, activeGridSize, engine.getCurrentPositions(), moveCount,
-                        remainingSeconds, PuzzleClockMode.COUNTDOWN, 0, timerStarted
+                        remainingSeconds, PuzzleClockMode.COUNTDOWN, 0, timerStarted, totalChallengeSeconds
                     )
                 }
                 if (remainingSeconds == 0) {
@@ -201,7 +208,7 @@ fun PicturePuzzleGameScreen(
                     timerExpanded = false
                     settings.saveSession(
                         level.id, activeGridSize, engine.getCurrentPositions(), moveCount,
-                        0, PuzzleClockMode.COUNTDOWN, 0, true
+                        0, PuzzleClockMode.COUNTDOWN, 0, true, totalChallengeSeconds
                     )
                 }
             }
@@ -235,7 +242,7 @@ fun PicturePuzzleGameScreen(
         celebrationVersion++
         val token = celebrationVersion
         scope.launch {
-            delay(900)
+            delay(1_450)
             if (celebrationVersion == token) {
                 celebratingTileIds = emptySet()
                 celebrationMessage = null
@@ -253,15 +260,20 @@ fun PicturePuzzleGameScreen(
                 remainingSeconds,
                 PuzzleClockMode.COUNTDOWN,
                 0,
-                timerStarted
+                timerStarted,
+                totalChallengeSeconds
             )
         }
     }
 
     fun adjustChallengeTime(deltaSeconds: Int) {
         if (timeExpired || isSolved) return
-        val upperLimit = (initialChallengeSeconds + 10 * 60).coerceAtMost(30 * 60)
-        remainingSeconds = (remainingSeconds + deltaSeconds).coerceIn(30, upperLimit)
+        val consumedSeconds = (totalChallengeSeconds - remainingSeconds).coerceAtLeast(0)
+        val maxRemaining = (initialChallengeSeconds + 10 * 60).coerceAtMost(30 * 60)
+        val newRemaining = (remainingSeconds + deltaSeconds).coerceIn(30, maxRemaining)
+        remainingSeconds = newRemaining
+        // Keep already-consumed time stable while the player adjusts the challenge budget.
+        totalChallengeSeconds = (consumedSeconds + newRemaining).coerceAtLeast(newRemaining)
         persistTimerState()
     }
 
@@ -282,8 +294,20 @@ fun PicturePuzzleGameScreen(
         persistTimerState()
     }
 
+    fun resetChallengeTimer() {
+        if (!initialized || isSolved) return
+        timerRunning = false
+        timerStarted = false
+        timeExpired = false
+        remainingSeconds = totalChallengeSeconds
+        stopwatchElapsedSeconds = 0
+        clockMode = PuzzleClockMode.COUNTDOWN
+        timerExpanded = true
+        persistTimerState()
+    }
+
     fun pauseAndCollapseTimer() {
-        if (!timerRunning || isSolved) return
+        if (isSolved) return
         timerRunning = false
         timerExpanded = false
         persistTimerState()
@@ -293,6 +317,7 @@ fun PicturePuzzleGameScreen(
         engine.shuffle()
         moveCount = 0
         remainingSeconds = initialChallengeSeconds
+        totalChallengeSeconds = initialChallengeSeconds
         stopwatchElapsedSeconds = 0
         clockMode = PuzzleClockMode.COUNTDOWN
         timerStarted = false
@@ -314,7 +339,8 @@ fun PicturePuzzleGameScreen(
                 remainingSeconds,
                 PuzzleClockMode.COUNTDOWN,
                 0,
-                false
+                false,
+                totalChallengeSeconds
             )
         }
     }
@@ -342,7 +368,7 @@ fun PicturePuzzleGameScreen(
          * at the exact same screen coordinate throughout timer interactions.
          */
         val timerPanelVisible = timerExpanded && !timeExpired
-        val boardTopZone = 232.dp
+        val boardTopZone = 212.dp
         val bottomZone = 126.dp
         val boardAspect = 1.28f // portrait board without excessive vertical stretching
         val horizontalBoardSpace = (maxWidth - 8.dp).coerceAtLeast(220.dp)
@@ -439,113 +465,155 @@ fun PicturePuzzleGameScreen(
                 visible = timerPanelVisible,
                 modifier = Modifier
                     .align(Alignment.TopCenter)
-                    .padding(top = 66.dp),
-                enter = fadeIn(animationSpec = tween(150)) +
+                    .padding(top = 62.dp),
+                enter = fadeIn(animationSpec = tween(170)) +
                     scaleIn(
                         animationSpec = spring(
-                            dampingRatio = 0.84f,
+                            dampingRatio = 0.92f,
                             stiffness = Spring.StiffnessMediumLow
                         ),
-                        initialScale = 0.16f,
-                        transformOrigin = TransformOrigin(0.94f, 0.02f)
+                        initialScale = 0.84f,
+                        transformOrigin = TransformOrigin(0.94f, 0.08f)
                     ),
-                exit = fadeOut(animationSpec = tween(210)) +
+                exit = fadeOut(animationSpec = tween(150)) +
                     scaleOut(
                         animationSpec = tween(
-                            durationMillis = 390,
+                            durationMillis = 240,
                             easing = FastOutSlowInEasing
                         ),
-                        targetScale = 0.16f,
-                        transformOrigin = TransformOrigin(0.94f, 0.02f)
+                        targetScale = 0.84f,
+                        transformOrigin = TransformOrigin(0.94f, 0.08f)
                     )
             ) {
                 Surface(
                     modifier = Modifier
-                        .fillMaxWidth(0.90f)
+                        .fillMaxWidth(0.92f)
+                        .widthIn(max = 334.dp)
+                        .height(72.dp)
                         .border(
                             1.dp,
-                            Color(0xFF78A7A1).copy(alpha = 0.55f),
-                            RoundedCornerShape(26.dp)
+                            Color(0xFF7C9F98).copy(alpha = 0.30f),
+                            RoundedCornerShape(14.dp)
                         ),
-                    shape = RoundedCornerShape(26.dp),
-                    color = if (remainingSeconds <= 60) Color(0xFFFFE4DA) else Color(0xFFFFFBF3),
-                    tonalElevation = 3.dp,
-                    shadowElevation = 9.dp
+                    shape = RoundedCornerShape(14.dp),
+                    color = if (remainingSeconds <= 60) Color(0xFFFFEEE7) else Color(0xFFFFFCF7),
+                    tonalElevation = 0.dp,
+                    shadowElevation = 3.dp
                 ) {
-                    Column(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
+                    Row(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 8.dp, vertical = 7.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = Color(0xFFF2E8D8)
                         ) {
-                            IconButton(
+                            TextButton(
                                 onClick = { adjustChallengeTime(-30) },
                                 enabled = initialized && !isSolved && remainingSeconds > 30,
-                                modifier = Modifier.size(40.dp)
+                                modifier = Modifier
+                                    .width(46.dp)
+                                    .height(38.dp)
                             ) {
                                 Text(
                                     "−30",
                                     style = MaterialTheme.typography.labelMedium,
                                     fontWeight = FontWeight.ExtraBold,
-                                    color = Color(0xFF354A46)
+                                    color = Color(0xFF344B46)
                                 )
                             }
+                        }
 
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(
-                                    formatChallengeTime(remainingSeconds),
-                                    style = MaterialTheme.typography.headlineSmall,
-                                    fontWeight = FontWeight.Black,
-                                    color = if (remainingSeconds <= 60) {
-                                        MaterialTheme.colorScheme.onErrorContainer
-                                    } else {
-                                        Color(0xFF2F6765)
-                                    }
+                        Column(
+                            modifier = Modifier
+                                .width(104.dp)
+                                .clickable(
+                                    enabled = initialized && !isSolved,
+                                    onClick = { pauseAndCollapseTimer() }
                                 )
-                                Text(
-                                    if (timerRunning) "CHALLENGE CLOCK · RUNNING" else "CHALLENGE CLOCK",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = Color(0xFF5E655F)
-                                )
-                            }
+                                .padding(vertical = 1.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Text(
+                                formatChallengeTime(remainingSeconds),
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Black,
+                                color = if (remainingSeconds <= 60) {
+                                    MaterialTheme.colorScheme.onErrorContainer
+                                } else {
+                                    Color(0xFF285F5D)
+                                },
+                                maxLines = 1
+                            )
+                            Text(
+                                "TOTAL ${formatChallengeTime(totalChallengeSeconds)}",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF7B746B),
+                                maxLines = 1
+                            )
+                        }
 
-                            IconButton(
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = Color(0xFFF2E8D8)
+                        ) {
+                            TextButton(
                                 onClick = { adjustChallengeTime(30) },
                                 enabled = initialized && !isSolved,
-                                modifier = Modifier.size(40.dp)
+                                modifier = Modifier
+                                    .width(46.dp)
+                                    .height(38.dp)
                             ) {
                                 Text(
                                     "+30",
                                     style = MaterialTheme.typography.labelMedium,
                                     fontWeight = FontWeight.ExtraBold,
-                                    color = Color(0xFF354A46)
+                                    color = Color(0xFF344B46)
                                 )
                             }
                         }
 
-                        Spacer(Modifier.height(4.dp))
-                        if (!timerStarted) {
-                            Button(
-                                onClick = { startTimer() },
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = if (timerRunning) Color(0xFF2F7779) else Color(0xFFE6F0EB)
+                        ) {
+                            IconButton(
+                                onClick = {
+                                    if (timerRunning) pauseAndCollapseTimer() else startTimer()
+                                },
                                 enabled = initialized && !isSolved,
-                                modifier = Modifier.height(40.dp),
-                                shape = RoundedCornerShape(20.dp)
+                                modifier = Modifier.size(40.dp)
                             ) {
-                                Icon(Icons.Default.Timer, contentDescription = null, modifier = Modifier.size(17.dp))
-                                Spacer(Modifier.width(6.dp))
-                                Text("Start")
+                                Icon(
+                                    imageVector = if (timerRunning) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                    contentDescription = if (timerRunning) "Pause timer" else "Play timer",
+                                    tint = if (timerRunning) Color.White else Color(0xFF2E625F),
+                                    modifier = Modifier.size(20.dp)
+                                )
                             }
-                        } else {
-                            Text(
-                                "$moveCount moves · tap the top-right control to pause",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Color(0xFF77766E).copy(alpha = 0.88f),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = Color(0xFFF5ECE0)
+                        ) {
+                            IconButton(
+                                onClick = { resetChallengeTimer() },
+                                enabled = initialized && !isSolved,
+                                modifier = Modifier.size(40.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Refresh,
+                                    contentDescription = "Reset timer",
+                                    tint = Color(0xFF6D6158),
+                                    modifier = Modifier.size(19.dp)
+                                )
+                            }
                         }
                     }
                 }
@@ -639,7 +707,8 @@ fun PicturePuzzleGameScreen(
                                                     remainingSeconds,
                                                     PuzzleClockMode.COUNTDOWN,
                                                     0,
-                                                    timerStarted
+                                                    timerStarted,
+                                                    totalChallengeSeconds
                                                 )
                                             }
                                         }
@@ -666,7 +735,7 @@ fun PicturePuzzleGameScreen(
                             remainingSeconds = remainingSeconds,
                             clockMode = clockMode,
                             stopwatchElapsedSeconds = stopwatchElapsedSeconds,
-                            targetSeconds = initialChallengeSeconds
+                            targetSeconds = totalChallengeSeconds
                         )
                         Box(modifier = Modifier.width(boardWidth).height(boardHeight)) {
                             Image(
@@ -681,6 +750,7 @@ fun PicturePuzzleGameScreen(
                                 score = score,
                                 moves = moveCount,
                                 remainingSeconds = remainingSeconds,
+                                totalChallengeSeconds = totalChallengeSeconds,
                                 clockMode = clockMode,
                                 stopwatchElapsedSeconds = stopwatchElapsedSeconds,
                                 chapterNumber = level.id,
@@ -699,15 +769,17 @@ fun PicturePuzzleGameScreen(
         }
 
         // BOTTOM ~1 INCH: progress + low-priority controls. Kept visually quiet so the image wins.
+        val progressDeckShape = RoundedCornerShape(26.dp)
         Surface(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .padding(bottom = 10.dp, start = 8.dp, end = 8.dp),
-            shape = RoundedCornerShape(28.dp),
-            color = Color(0xFFFFFBF4).copy(alpha = 0.98f),
-            tonalElevation = 8.dp,
-            shadowElevation = 8.dp
+                .padding(bottom = 10.dp, start = 10.dp, end = 10.dp)
+                .border(1.dp, Color(0xFFE6D8C6), progressDeckShape),
+            shape = progressDeckShape,
+            color = Color(0xFFFFFCF7).copy(alpha = 0.99f),
+            tonalElevation = 4.dp,
+            shadowElevation = 6.dp
         ) {
             Column(
                 modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
@@ -727,7 +799,7 @@ fun PicturePuzzleGameScreen(
                                 color = Color(0xFF303B37)
                             )
                             Text(
-                                "$connectionCount of $totalConnections connections",
+                                "$connectionCount of $totalConnections connections · $moveCount moves",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = Color(0xFF6C6B63)
                             )
@@ -880,6 +952,7 @@ private fun CompletionResultOverlay(
     score: Int,
     moves: Int,
     remainingSeconds: Int,
+    totalChallengeSeconds: Int,
     clockMode: PuzzleClockMode,
     stopwatchElapsedSeconds: Int,
     chapterNumber: Int,
@@ -924,7 +997,8 @@ private fun CompletionResultOverlay(
                 Text("Solved in $moves moves", style = MaterialTheme.typography.bodyMedium)
                 Text(
                     if (clockMode == PuzzleClockMode.COUNTDOWN) {
-                        "${formatChallengeTime(remainingSeconds)} left on the countdown"
+                        val consumed = (totalChallengeSeconds - remainingSeconds).coerceAtLeast(0)
+                        "${formatChallengeTime(remainingSeconds)} left · ${formatChallengeTime(consumed)} used"
                     } else {
                         "Completed in ${formatChallengeTime(stopwatchElapsedSeconds)}"
                     },
