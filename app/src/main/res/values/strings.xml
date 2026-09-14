@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Mosaic Blocks</string>
+    <string name="app_name">Cozy Picture Blocks</string>
     <string name="game_paused">Game Paused</string>
     <string name="score">Score</string>
     <string name="best_score">Best Score</string>

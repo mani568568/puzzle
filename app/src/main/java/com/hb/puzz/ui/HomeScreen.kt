@@ -1,24 +1,43 @@
 package com.hb.puzz.ui
 
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.*
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.hb.puzz.domain.PuzzleLevel
 
-/**
- * The home screen with game options.
- */
 @Composable
 fun HomeScreen(
     hasSavedGame: Boolean,
@@ -31,270 +50,172 @@ fun HomeScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
+            .background(MaterialTheme.colorScheme.background)
+            .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
         Text(
-            text = "Mosaic Blocks",
-            style = MaterialTheme.typography.displayMedium.copy(fontWeight = FontWeight.Bold),
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.padding(bottom = 48.dp)
+            text = "Cozy Picture Blocks",
+            style = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.Bold),
+            color = MaterialTheme.colorScheme.primary
         )
-        
+        Spacer(Modifier.height(12.dp))
+        Text("Restore each picture by swapping its tiles.", style = MaterialTheme.typography.bodyLarge)
+        Spacer(Modifier.height(40.dp))
+
         if (hasSavedGame) {
             Button(
                 onClick = onContinue,
-                modifier = Modifier
-                    .fillMaxWidth(0.75f)
-                    .height(56.dp),
+                modifier = Modifier.fillMaxWidth(0.8f).height(56.dp),
                 shape = CircleShape
-            ) {
-                Text("Continue", style = MaterialTheme.typography.bodyLarge)
-            }
-            
-            Spacer(modifier = Modifier.height(16.dp))
+            ) { Text("Continue") }
+            Spacer(Modifier.height(12.dp))
         }
-        
+
         Button(
             onClick = onStartNewGame,
-            modifier = Modifier
-                .fillMaxWidth(0.75f)
-                .height(56.dp),
+            modifier = Modifier.fillMaxWidth(0.8f).height(56.dp),
             shape = CircleShape
-        ) {
-            Text("New Game", style = MaterialTheme.typography.bodyLarge)
-        }
-        
-        Spacer(modifier = Modifier.height(16.dp))
-        
+        ) { Text("Choose Level") }
+
+        Spacer(Modifier.height(12.dp))
         OutlinedButton(
             onClick = onHowToPlay,
-            modifier = Modifier
-                .fillMaxWidth(0.75f)
-                .height(56.dp),
+            modifier = Modifier.fillMaxWidth(0.8f).height(56.dp),
             shape = CircleShape
-        ) {
-            Text("How to Play", style = MaterialTheme.typography.bodyLarge)
-        }
-        
-        Spacer(modifier = Modifier.height(16.dp))
-        
-        IconButton(onClick = onSettings, modifier = Modifier.align(Alignment.End)) {
-            Icon(
-                imageVector = Icons.Default.Settings,
-                contentDescription = "Settings"
-            )
+        ) { Text("How to Play") }
+
+        Spacer(Modifier.height(20.dp))
+        IconButton(onClick = onSettings) {
+            Icon(Icons.Default.Settings, contentDescription = "Settings")
         }
     }
 }
 
-/**
- * Settings screen.
- */
+@Composable
+fun LevelSelectionScreen(
+    highestUnlockedLevel: Int,
+    completedLevels: Set<Int>,
+    onBack: () -> Unit,
+    onLevelSelected: (Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(16.dp)
+    ) {
+        ScreenHeader(title = "Choose a Level", onBack = onBack)
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            items(PuzzleLevel.ALL_LEVELS, key = { it.id }) { level ->
+                val unlocked = level.id <= highestUnlockedLevel
+                val completed = level.id in completedLevels
+                Card(
+                    onClick = { if (unlocked) onLevelSelected(level.id) },
+                    enabled = unlocked,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column {
+                            Text("Level ${level.id} · ${level.title}", fontWeight = FontWeight.SemiBold)
+                            Text(
+                                "${level.gridSize} × ${level.gridSize} · ${level.difficulty.name.lowercase().replaceFirstChar { it.uppercase() }}",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                        when {
+                            completed -> Icon(Icons.Default.CheckCircle, contentDescription = "Completed")
+                            !unlocked -> Icon(Icons.Default.Lock, contentDescription = "Locked")
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 fun SettingsScreen(
     soundEnabled: Boolean,
     hapticsEnabled: Boolean,
     darkThemeEnabled: Boolean,
+    onBack: () -> Unit,
     onSoundChanged: (Boolean) -> Unit,
     onHapticsChanged: (Boolean) -> Unit,
     onDarkThemeChanged: (Boolean) -> Unit,
+    onResetProgress: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var confirmReset by remember { mutableStateOf(false) }
+
     Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(16.dp)
+        modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(16.dp)
     ) {
-        Text(
-            text = "Settings",
-            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.padding(bottom = 24.dp)
+        ScreenHeader(title = "Settings", onBack = onBack)
+        SettingRow("Sound", soundEnabled, onSoundChanged)
+        SettingRow("Haptics", hapticsEnabled, onHapticsChanged)
+        SettingRow("Dark Theme", darkThemeEnabled, onDarkThemeChanged)
+        Spacer(Modifier.height(32.dp))
+        OutlinedButton(onClick = { confirmReset = true }, modifier = Modifier.fillMaxWidth()) {
+            Text("Reset Game Progress")
+        }
+    }
+
+    if (confirmReset) {
+        AlertDialog(
+            onDismissRequest = { confirmReset = false },
+            title = { Text("Reset progress?") },
+            text = { Text("Completed levels and the saved puzzle will be cleared. Your settings will stay unchanged.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmReset = false
+                    onResetProgress()
+                }) { Text("Reset") }
+            },
+            dismissButton = { TextButton(onClick = { confirmReset = false }) { Text("Cancel") } }
         )
-        
-        // Sound toggle
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
-        ) {
-            Text("Sound", style = MaterialTheme.typography.bodyMedium)
-            
-            Switch(
-                checked = soundEnabled,
-                onCheckedChange = onSoundChanged
-            )
-        }
-        
-        // Haptics toggle
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
-        ) {
-            Text("Haptics", style = MaterialTheme.typography.bodyMedium)
-            
-            Switch(
-                checked = hapticsEnabled,
-                onCheckedChange = onHapticsChanged
-            )
-        }
-        
-        // Dark theme toggle
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
-        ) {
-            Text("Dark Theme", style = MaterialTheme.typography.bodyMedium)
-            
-            Switch(
-                checked = darkThemeEnabled,
-                onCheckedChange = onDarkThemeChanged
-            )
-        }
     }
 }
 
-/**
- * How to Play screen.
- */
 @Composable
-fun HowToPlayScreen(modifier: Modifier = Modifier) {
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(16.dp)
+private fun SettingRow(label: String, checked: Boolean, onChanged: (Boolean) -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Text(
-            text = "How to Play",
-            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.padding(bottom = 24.dp)
-        )
-
-        Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-            Text("1. Choose a tile", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
-            Text("Tap any picture tile to select it.")
-
-            Text("2. Swap two tiles", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold), modifier = Modifier.padding(top = 24.dp))
-            Text("Tap a second tile to swap their positions.")
-
-            Text("3. Restore the artwork", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold), modifier = Modifier.padding(top = 24.dp))
-            Text("Keep swapping until every tile is back in its original picture position.")
-
-            Text("4. Progress through levels", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold), modifier = Modifier.padding(top = 24.dp))
-            Text("Later levels use larger 4×4 and 5×5 grids for a harder challenge.")
-        }
+        Text(label, style = MaterialTheme.typography.bodyLarge)
+        Switch(checked = checked, onCheckedChange = onChanged)
     }
 }
 
-/**
- * Pause screen.
- */
 @Composable
-fun PauseScreen(
-    onResume: () -> Unit,
-    onRestart: () -> Unit,
-    onHome: () -> Unit,
-    modifier: Modifier = Modifier
-) {
+fun HowToPlayScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
     Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background.copy(alpha = 0.8f)),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(16.dp)
     ) {
-        Text(
-            text = "Paused",
-            style = MaterialTheme.typography.displayMedium.copy(fontWeight = FontWeight.Bold),
-            color = MaterialTheme.colorScheme.primary
-        )
-        
-        Spacer(modifier = Modifier.height(48.dp))
-        
-        Button(
-            onClick = onResume,
-            modifier = Modifier.fillMaxWidth(0.75f).height(56.dp)
-        ) {
-            Text("Resume", style = MaterialTheme.typography.bodyLarge)
-        }
-        
-        Spacer(modifier = Modifier.height(16.dp))
-        
-        OutlinedButton(
-            onClick = onRestart,
-            modifier = Modifier.fillMaxWidth(0.75f).height(56.dp)
-        ) {
-            Text("Restart", style = MaterialTheme.typography.bodyLarge)
-        }
-        
-        Spacer(modifier = Modifier.height(16.dp))
-        
-        TextButton(
-            onClick = onHome,
-            modifier = Modifier.fillMaxWidth(0.75f).height(56.dp)
-        ) {
-            Text("Home", style = MaterialTheme.typography.bodyLarge)
-        }
+        ScreenHeader(title = "How to Play", onBack = onBack)
+        Text("1. Tap one picture tile to select it.", style = MaterialTheme.typography.bodyLarge)
+        Spacer(Modifier.height(16.dp))
+        Text("2. Tap a second tile to swap the two positions.", style = MaterialTheme.typography.bodyLarge)
+        Spacer(Modifier.height(16.dp))
+        Text("3. Keep swapping until the full artwork is restored.", style = MaterialTheme.typography.bodyLarge)
+        Spacer(Modifier.height(16.dp))
+        Text("4. Completing a level unlocks the next one. Later levels use larger 4×4 and 5×5 grids.", style = MaterialTheme.typography.bodyLarge)
     }
 }
 
-/**
- * Game over screen.
- */
 @Composable
-fun GameOverScreen(
-    score: Int,
-    bestScore: Int,
-    onPlayAgain: () -> Unit,
-    onHome: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background.copy(alpha = 0.8f)),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+private fun ScreenHeader(title: String, onBack: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().height(56.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            text = "Game Over",
-            style = MaterialTheme.typography.displayMedium.copy(fontWeight = FontWeight.Bold),
-            color = MaterialTheme.colorScheme.primary
-        )
-        
-        Spacer(modifier = Modifier.height(48.dp))
-        
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("Score", style = MaterialTheme.typography.bodyMedium)
-            Text(score.toString(), style = MaterialTheme.typography.displayLarge.copy(fontWeight = FontWeight.Bold))
-            
-            Spacer(modifier = Modifier.height(24.dp))
-            
-            Text("Best Score", style = MaterialTheme.typography.bodyMedium)
-            Text(bestScore.toString(), style = MaterialTheme.typography.displayLarge.copy(fontWeight = FontWeight.Bold))
-        }
-        
-        Spacer(modifier = Modifier.height(64.dp))
-        
-        Button(
-            onClick = onPlayAgain,
-            modifier = Modifier.fillMaxWidth(0.75f).height(56.dp)
-        ) {
-            Text("Play Again", style = MaterialTheme.typography.bodyLarge)
-        }
-        
-        Spacer(modifier = Modifier.height(16.dp))
-        
-        TextButton(
-            onClick = onHome,
-            modifier = Modifier.fillMaxWidth(0.75f).height(56.dp)
-        ) {
-            Text("Home", style = MaterialTheme.typography.bodyLarge)
-        }
+        IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = "Back") }
+        Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
     }
+    Spacer(Modifier.height(16.dp))
 }
