@@ -1,8 +1,6 @@
-package com.hb.puzz.domain
+package com.hb.puzz.domain.model
 
-/**
- * Legacy class from Mosaic Blocks - kept for compatibility.
- */
+/** Colors available for block pieces. */
 enum class PieceColor(val hex: String) {
     CORAL("#FFB39A"),
     TEAL("#7DE3E8"),
