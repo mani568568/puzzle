@@ -132,9 +132,10 @@ fun PicturePuzzleGameScreen(
     }
 
     fun showConnectionCelebration(newTileIds: Set<Int>, newConnectionCount: Int) {
-        celebratingTileIds = newTileIds
-        val linkedGroupSize = engine.getConnectedGroups()
+        val mergedGroups = engine.getConnectedGroups()
             .filter { group -> group.any { it in newTileIds } }
+        celebratingTileIds = mergedGroups.flatten().toSet().ifEmpty { newTileIds }
+        val linkedGroupSize = mergedGroups
             .maxOfOrNull { it.size }
             ?: newTileIds.size
 
@@ -250,10 +251,10 @@ fun PicturePuzzleGameScreen(
                         connectedTileIds = connectedTileIds,
                         celebratingTileIds = celebratingTileIds,
                         celebrationVersion = celebrationVersion,
-                        onTileDropped = { posA, posB ->
+                        onGroupDropped = { anchorTileId, targetPosition ->
                             val beforeConnections = engine.getCorrectConnections()
 
-                            if (engine.attemptSwap(posA, posB)) {
+                            if (engine.attemptMoveGroup(anchorTileId, targetPosition)) {
                                 moveCount++
                                 val afterConnections = engine.getCorrectConnections()
                                 val newlyCreated = afterConnections - beforeConnections

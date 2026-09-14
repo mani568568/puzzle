@@ -151,4 +151,32 @@ class PuzzleEngineTest {
         assertEquals(12, engine.getTotalPossibleConnections())
     }
 
+    @Test
+    fun `connected tiles move as one rigid group`() {
+        val engine = PuzzleEngine(3, 12345L)
+        assertTrue(engine.restorePositions(intArrayOf(8, 6, 5, 0, 1, 7, 4, 3, 2)))
+
+        assertEquals(setOf(0, 1), engine.getGroupForTile(0))
+        assertTrue(engine.attemptMoveGroup(anchorTileId = 0, targetPosition = 0))
+
+        assertEquals(0, engine.getPositionOf(0))
+        assertEquals(1, engine.getPositionOf(1))
+        assertTrue(engine.isValidPermutation())
+        assertTrue(engine.getCorrectConnections().any {
+            it.firstTileId == 0 && it.secondTileId == 1
+        })
+    }
+
+    @Test
+    fun `group move is rejected when rigid shape would leave board`() {
+        val engine = PuzzleEngine(3, 12345L)
+        assertTrue(engine.restorePositions(intArrayOf(8, 6, 5, 0, 1, 7, 4, 3, 2)))
+
+        // Tile 0 and 1 are a horizontal pair. Anchoring tile 0 at the far-right cell
+        // would force tile 1 outside the board.
+        assertNull(engine.getGroupMoveTargets(anchorTileId = 0, targetPosition = 2))
+        assertFalse(engine.attemptMoveGroup(anchorTileId = 0, targetPosition = 2))
+        assertTrue(engine.isValidPermutation())
+    }
+
 }

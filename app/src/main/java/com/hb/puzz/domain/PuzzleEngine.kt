@@ -24,6 +24,10 @@ class PuzzleEngine(
 
     fun getTotalTiles(): Int = totalTiles
 
+    /**
+     * Legacy single-tile swap retained for tests/backward compatibility.
+     * Normal gameplay now uses [attemptMoveGroup].
+     */
     fun attemptSwap(posA: Int, posB: Int): Boolean {
         if (posA !in 0 until totalTiles || posB !in 0 until totalTiles || posA == posB) {
             return false
@@ -39,8 +43,7 @@ class PuzzleEngine(
 
     /**
      * Shuffles until the puzzle is unsolved and, when practical, avoids starting with
-     * too many already-connected neighbors. This keeps the opening state feeling random
-     * and gives the player more satisfying connections to discover.
+     * too many already-connected neighbors. This keeps the opening state feeling random.
      */
     fun shuffle() {
         val maxStartingConnections = (getTotalPossibleConnections() / 6).coerceAtLeast(1)
@@ -59,7 +62,6 @@ class PuzzleEngine(
             (isSolved() || getCorrectConnections().size > maxStartingConnections)
         )
 
-        // Extremely defensive: a tiny board could theoretically still land solved.
         if (isSolved() && totalTiles > 1) {
             val temp = positions[0]
             positions[0] = positions[1]
@@ -137,9 +139,7 @@ class PuzzleEngine(
         return connections
     }
 
-    /**
-     * Returns groups of two or more tiles joined by correct neighbor relationships.
-     */
+    /** Returns groups of two or more tiles joined by correct neighbor relationships. */
     fun getConnectedGroups(): List<List<Int>> {
         val adjacency = Array(totalTiles) { mutableSetOf<Int>() }
         getCorrectConnections().forEach { connection ->
@@ -168,6 +168,92 @@ class PuzzleEngine(
             if (group.size > 1) groups.add(group.sorted())
         }
         return groups
+    }
+
+    /**
+     * Returns the rigid cluster containing [tileId]. A loose tile is a one-item cluster.
+     * Correctly joined pieces therefore automatically become one movable unit.
+     */
+    fun getGroupForTile(tileId: Int): Set<Int> {
+        if (tileId !in 0 until totalTiles) return emptySet()
+        return getConnectedGroups()
+            .firstOrNull { tileId in it }
+            ?.toSet()
+            ?: setOf(tileId)
+    }
+
+    /**
+     * Calculates the destination board position for every tile in the cluster containing
+     * [anchorTileId] if that cluster were translated so the anchor lands on [targetPosition].
+     * Returns null when that rigid translation would leave the board.
+     */
+    fun getGroupMoveTargets(anchorTileId: Int, targetPosition: Int): Map<Int, Int>? {
+        if (anchorTileId !in 0 until totalTiles || targetPosition !in 0 until totalTiles) {
+            return null
+        }
+
+        val anchorPosition = getPositionOf(anchorTileId)
+        if (anchorPosition < 0) return null
+
+        val anchorRow = anchorPosition / gridSize
+        val anchorCol = anchorPosition % gridSize
+        val targetRow = targetPosition / gridSize
+        val targetCol = targetPosition % gridSize
+        val deltaRow = targetRow - anchorRow
+        val deltaCol = targetCol - anchorCol
+
+        val group = getGroupForTile(anchorTileId)
+        val result = linkedMapOf<Int, Int>()
+
+        for (tileId in group) {
+            val sourcePosition = getPositionOf(tileId)
+            if (sourcePosition < 0) return null
+            val sourceRow = sourcePosition / gridSize
+            val sourceCol = sourcePosition % gridSize
+            val movedRow = sourceRow + deltaRow
+            val movedCol = sourceCol + deltaCol
+
+            if (movedRow !in 0 until gridSize || movedCol !in 0 until gridSize) return null
+            result[tileId] = movedRow * gridSize + movedCol
+        }
+
+        return result
+    }
+
+    /**
+     * Moves an already-connected cluster as one rigid block. Tiles occupying the new footprint
+     * are shifted into the cells vacated by the cluster, preserving a valid full-board permutation.
+     * Existing internal connections cannot break because every member receives the same offset.
+     */
+    fun attemptMoveGroup(anchorTileId: Int, targetPosition: Int): Boolean {
+        val anchorPosition = getPositionOf(anchorTileId)
+        if (anchorPosition < 0 || targetPosition == anchorPosition) return false
+
+        val targetsByTile = getGroupMoveTargets(anchorTileId, targetPosition) ?: return false
+        val group = targetsByTile.keys
+        val sourcePositions = group.map { getPositionOf(it) }.toSet()
+        val destinationPositions = targetsByTile.values.toSet()
+
+        val vacated = (sourcePositions - destinationPositions).sorted()
+        val incoming = (destinationPositions - sourcePositions).sorted()
+        if (vacated.size != incoming.size) return false
+
+        val before = positions.clone()
+        val updated = positions.clone()
+
+        // Move displaced loose/other-group tiles into the cells the moving cluster leaves behind.
+        incoming.zip(vacated).forEach { (incomingPosition, vacatedPosition) ->
+            updated[vacatedPosition] = before[incomingPosition]
+        }
+
+        // Finally place every member of the rigid cluster at its translated destination.
+        targetsByTile.forEach { (tileId, destinationPosition) ->
+            updated[destinationPosition] = tileId
+        }
+
+        if (!isValidPermutation(updated)) return false
+        positions = updated
+        return true
     }
 
     fun copy(): PuzzleEngine = PuzzleEngine(gridSize).also {
