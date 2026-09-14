@@ -5,9 +5,9 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
@@ -59,6 +59,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -333,192 +334,218 @@ fun PicturePuzzleGameScreen(
             .background(gameBackground)
             .padding(horizontal = 2.dp)
     ) {
-        // Keep the controls compact and let the board use the phone as a portrait rectangle.
-        val topZone = 148.dp
-        val bottomZone = 112.dp
-        val horizontalBoardSpace = (maxWidth - 4.dp).coerceAtLeast(220.dp)
-        val verticalBoardSpace = (maxHeight - topZone - bottomZone).coerceAtLeast(300.dp)
-        val boardWidth = horizontalBoardSpace
-        // Keep the portrait feel, but do not stretch the image too far toward the bottom deck.
-        val boardHeight = minOf(verticalBoardSpace, boardWidth * 1.33f)
+        /*
+         * Constant-layout timer architecture:
+         * The puzzle board NEVER moves when the timer opens or closes. We permanently
+         * reserve the same header depth used by the expanded/running timer state, then
+         * render the timer as a morphing overlay inside that space. This keeps every tile
+         * at the exact same screen coordinate throughout timer interactions.
+         */
+        val timerPanelVisible = timerExpanded && !timeExpired
+        val boardTopZone = 232.dp
+        val bottomZone = 126.dp
+        val boardAspect = 1.28f // portrait board without excessive vertical stretching
+        val horizontalBoardSpace = (maxWidth - 8.dp).coerceAtLeast(220.dp)
+        val verticalBoardSpace = (maxHeight - boardTopZone - bottomZone - 8.dp).coerceAtLeast(260.dp)
+        val widthAllowedByHeight = verticalBoardSpace / boardAspect
+        val boardWidth = minOf(horizontalBoardSpace, widthAllowedByHeight)
+        val boardHeight = boardWidth * boardAspect
         val connectionProgress = if (totalConnections == 0) 0f
         else (connectionCount.toFloat() / totalConnections.toFloat()).coerceIn(0f, 1f)
 
-        // TOP SAFE HUD: there is exactly ONE stateful timer control in the header.
-        // Idle/paused -> Timer icon. Running -> the same control becomes Pause.
-        // No separate Pause and Timer buttons are rendered at the same time.
+        // TOP SAFE HUD: one stateful timer control + a non-layout timer morph stage.
+        // The stage is intentionally a fixed overlay. Expanding/collapsing it never changes
+        // boardTopZone, so the puzzle remains perfectly stationary.
         Box(
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
+                .height(boardTopZone)
                 .statusBarsPadding()
                 .padding(top = 10.dp, start = 10.dp, end = 10.dp)
         ) {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Box(modifier = Modifier.fillMaxWidth()) {
-                    Surface(
-                        modifier = Modifier.align(Alignment.CenterStart),
-                        shape = CircleShape,
-                        color = Color(0xFFFFFBF3).copy(alpha = 0.96f)
-                    ) {
-                        IconButton(onClick = onBack) {
-                            Icon(
-                                Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "Back",
-                                tint = Color(0xFF354A46)
-                            )
-                        }
-                    }
-
-                    Column(
-                        modifier = Modifier.align(Alignment.Center),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            "Chapter ${level.id} · ${level.title}",
-                            modifier = Modifier.widthIn(max = 205.dp),
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = Color(0xFF2E403D),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+            Box(modifier = Modifier.fillMaxWidth()) {
+                Surface(
+                    modifier = Modifier.align(Alignment.CenterStart),
+                    shape = CircleShape,
+                    color = Color(0xFFFFFBF3).copy(alpha = 0.96f)
+                ) {
+                    IconButton(onClick = onBack) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = Color(0xFF354A46)
                         )
-                        Text(
-                            "$activeGridSize×$activeGridSize · ${level.difficulty.shortLabel} · Par $parMoves moves",
-                            modifier = Modifier.widthIn(max = 220.dp),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color(0xFF746E63),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-
-                    Surface(
-                        modifier = Modifier.align(Alignment.CenterEnd),
-                        shape = CircleShape,
-                        color = if (timerRunning) Color(0xFF2F7779) else Color(0xFFFFFBF3).copy(alpha = 0.96f),
-                        tonalElevation = 3.dp,
-                        shadowElevation = 4.dp
-                    ) {
-                        IconButton(
-                            onClick = {
-                                // One control, two visual states.
-                                // Timer -> expand/resume. Pause -> pause/collapse.
-                                if (timerRunning) {
-                                    pauseAndCollapseTimer()
-                                } else {
-                                    openOrResumeTimer()
-                                }
-                            },
-                            enabled = initialized && !isSolved && !timeExpired
-                        ) {
-                            Icon(
-                                imageVector = if (timerRunning) Icons.Default.Pause else Icons.Default.Timer,
-                                contentDescription = if (timerRunning) "Pause challenge timer" else "Open challenge timer",
-                                tint = if (timerRunning) Color.White else Color(0xFF354A46)
-                            )
-                        }
                     }
                 }
 
-                Spacer(Modifier.height(8.dp))
-
-                AnimatedVisibility(
-                    visible = timerExpanded && !timeExpired,
-                    enter = fadeIn(tween(260)) +
-                        scaleIn(tween(420, easing = FastOutSlowInEasing), initialScale = 0.78f) +
-                        slideInHorizontally(tween(420, easing = FastOutSlowInEasing)) { it / 3 },
-                    exit = fadeOut(tween(180)) +
-                        scaleOut(tween(340, easing = FastOutSlowInEasing), targetScale = 0.78f) +
-                        slideOutHorizontally(tween(340, easing = FastOutSlowInEasing)) { it / 3 }
+                Column(
+                    modifier = Modifier.align(Alignment.Center),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxWidth(0.88f)
-                            .border(
-                                1.dp,
-                                Color(0xFF78A7A1).copy(alpha = 0.55f),
-                                RoundedCornerShape(26.dp)
-                            ),
-                        shape = RoundedCornerShape(26.dp),
-                        color = if (remainingSeconds <= 60) Color(0xFFFFE4DA) else Color(0xFFFFFBF3),
-                        tonalElevation = 3.dp,
-                        shadowElevation = 7.dp
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                IconButton(
-                                    onClick = { adjustChallengeTime(-30) },
-                                    enabled = initialized && !isSolved && remainingSeconds > 30,
-                                    modifier = Modifier.size(40.dp)
-                                ) {
-                                    Text(
-                                        "−30",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = Color(0xFF354A46)
-                                    )
-                                }
+                    Text(
+                        "Chapter ${level.id} · ${level.title}",
+                        modifier = Modifier.widthIn(max = 205.dp),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color(0xFF2E403D),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        "$activeGridSize×$activeGridSize · ${level.difficulty.shortLabel} · Par $parMoves moves",
+                        modifier = Modifier.widthIn(max = 220.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xFF746E63),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
 
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text(
-                                        formatChallengeTime(remainingSeconds),
-                                        style = MaterialTheme.typography.headlineSmall,
-                                        fontWeight = FontWeight.Black,
-                                        color = if (remainingSeconds <= 60) {
-                                            MaterialTheme.colorScheme.onErrorContainer
-                                        } else {
-                                            Color(0xFF2F6765)
-                                        }
-                                    )
-                                    Text(
-                                        if (timerRunning) "CHALLENGE CLOCK · RUNNING" else "CHALLENGE CLOCK",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = Color(0xFF5E655F)
-                                    )
-                                }
-
-                                IconButton(
-                                    onClick = { adjustChallengeTime(30) },
-                                    enabled = initialized && !isSolved,
-                                    modifier = Modifier.size(40.dp)
-                                ) {
-                                    Text(
-                                        "+30",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = Color(0xFF354A46)
-                                    )
-                                }
+                Surface(
+                    modifier = Modifier.align(Alignment.CenterEnd),
+                    shape = CircleShape,
+                    color = if (timerRunning) Color(0xFF2F7779) else Color(0xFFFFFBF3).copy(alpha = 0.96f),
+                    tonalElevation = 3.dp,
+                    shadowElevation = 4.dp
+                ) {
+                    IconButton(
+                        onClick = {
+                            when {
+                                timerRunning -> pauseAndCollapseTimer()
+                                timerExpanded && !timerStarted -> timerExpanded = false
+                                else -> openOrResumeTimer()
                             }
+                        },
+                        enabled = initialized && !isSolved && !timeExpired
+                    ) {
+                        Icon(
+                            imageVector = if (timerRunning) Icons.Default.Pause else Icons.Default.Timer,
+                            contentDescription = if (timerRunning) "Pause challenge timer" else "Open challenge timer",
+                            tint = if (timerRunning) Color.White else Color(0xFF354A46)
+                        )
+                    }
+                }
+            }
 
-                            if (!timerStarted) {
-                                Spacer(Modifier.height(4.dp))
-                                Button(
-                                    onClick = { startTimer() },
-                                    enabled = initialized && !isSolved
-                                ) {
-                                    Icon(Icons.Default.Timer, contentDescription = null, modifier = Modifier.size(18.dp))
-                                    Spacer(Modifier.width(6.dp))
-                                    Text("Start timer")
-                                }
-                            } else {
+            /*
+             * "Magic bloat" timer morph:
+             * - transformOrigin is near the top-right timer icon
+             * - spring growth makes the card feel like it blooms from the icon
+             * - reverse scale/fade visually folds it back into the same control
+             * - because this is an overlay, it contributes zero layout displacement
+             */
+            AnimatedVisibility(
+                visible = timerPanelVisible,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 66.dp),
+                enter = fadeIn(animationSpec = tween(150)) +
+                    scaleIn(
+                        animationSpec = spring(
+                            dampingRatio = 0.84f,
+                            stiffness = Spring.StiffnessMediumLow
+                        ),
+                        initialScale = 0.16f,
+                        transformOrigin = TransformOrigin(0.94f, 0.02f)
+                    ),
+                exit = fadeOut(animationSpec = tween(210)) +
+                    scaleOut(
+                        animationSpec = tween(
+                            durationMillis = 390,
+                            easing = FastOutSlowInEasing
+                        ),
+                        targetScale = 0.16f,
+                        transformOrigin = TransformOrigin(0.94f, 0.02f)
+                    )
+            ) {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth(0.90f)
+                        .border(
+                            1.dp,
+                            Color(0xFF78A7A1).copy(alpha = 0.55f),
+                            RoundedCornerShape(26.dp)
+                        ),
+                    shape = RoundedCornerShape(26.dp),
+                    color = if (remainingSeconds <= 60) Color(0xFFFFE4DA) else Color(0xFFFFFBF3),
+                    tonalElevation = 3.dp,
+                    shadowElevation = 9.dp
+                ) {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            IconButton(
+                                onClick = { adjustChallengeTime(-30) },
+                                enabled = initialized && !isSolved && remainingSeconds > 30,
+                                modifier = Modifier.size(40.dp)
+                            ) {
                                 Text(
-                                    "$moveCount moves · use the same top-right control to pause",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = Color(0xFF77766E).copy(alpha = 0.88f)
+                                    "−30",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = Color(0xFF354A46)
                                 )
                             }
+
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    formatChallengeTime(remainingSeconds),
+                                    style = MaterialTheme.typography.headlineSmall,
+                                    fontWeight = FontWeight.Black,
+                                    color = if (remainingSeconds <= 60) {
+                                        MaterialTheme.colorScheme.onErrorContainer
+                                    } else {
+                                        Color(0xFF2F6765)
+                                    }
+                                )
+                                Text(
+                                    if (timerRunning) "CHALLENGE CLOCK · RUNNING" else "CHALLENGE CLOCK",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color(0xFF5E655F)
+                                )
+                            }
+
+                            IconButton(
+                                onClick = { adjustChallengeTime(30) },
+                                enabled = initialized && !isSolved,
+                                modifier = Modifier.size(40.dp)
+                            ) {
+                                Text(
+                                    "+30",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = Color(0xFF354A46)
+                                )
+                            }
+                        }
+
+                        Spacer(Modifier.height(4.dp))
+                        if (!timerStarted) {
+                            Button(
+                                onClick = { startTimer() },
+                                enabled = initialized && !isSolved,
+                                modifier = Modifier.height(40.dp),
+                                shape = RoundedCornerShape(20.dp)
+                            ) {
+                                Icon(Icons.Default.Timer, contentDescription = null, modifier = Modifier.size(17.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Start")
+                            }
+                        } else {
+                            Text(
+                                "$moveCount moves · tap the top-right control to pause",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFF77766E).copy(alpha = 0.88f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
                         }
                     }
                 }
@@ -529,8 +556,8 @@ fun PicturePuzzleGameScreen(
         // are rectangular so the artwork uses more of a phone's vertical canvas.
         Surface(
             modifier = Modifier
-                .align(Alignment.Center)
-                .offset(y = 22.dp)
+                .align(Alignment.TopCenter)
+                .offset(y = boardTopZone)
                 .width(boardWidth + 6.dp)
                 .height(boardHeight + 6.dp),
             shape = RoundedCornerShape(13.dp),
@@ -676,7 +703,7 @@ fun PicturePuzzleGameScreen(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .padding(bottom = 8.dp, start = 6.dp, end = 6.dp),
+                .padding(bottom = 10.dp, start = 8.dp, end = 8.dp),
             shape = RoundedCornerShape(28.dp),
             color = Color(0xFFFFFBF4).copy(alpha = 0.98f),
             tonalElevation = 8.dp,
