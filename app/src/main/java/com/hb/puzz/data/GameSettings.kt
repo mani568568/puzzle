@@ -17,10 +17,24 @@ import kotlinx.coroutines.flow.map
 private val Context.picturePuzzleDataStore by preferencesDataStore(name = "cozy_blocks_settings")
 
 /** Persisted in-progress picture-puzzle session. */
+enum class PuzzleClockMode(val storedValue: String) {
+    COUNTDOWN("countdown"),
+    STOPWATCH("stopwatch");
+
+    companion object {
+        fun fromStored(value: String?): PuzzleClockMode =
+            values().firstOrNull { it.storedValue == value } ?: COUNTDOWN
+    }
+}
+
 data class PuzzleSession(
     val levelId: Int,
+    val gridSize: Int,
     val positions: IntArray,
-    val moveCount: Int
+    val moveCount: Int,
+    val remainingSeconds: Int? = null,
+    val clockMode: PuzzleClockMode = PuzzleClockMode.COUNTDOWN,
+    val stopwatchElapsedSeconds: Int = 0
 )
 
 /** Single source of truth for picture-puzzle progress and user preferences. */
@@ -36,8 +50,12 @@ class GameSettings(context: Context) {
         private val KEY_IMAGE_SOURCE = stringPreferencesKey("image_source")
 
         private val KEY_SAVED_LEVEL = intPreferencesKey("saved_level")
+        private val KEY_SAVED_GRID_SIZE = intPreferencesKey("saved_grid_size")
         private val KEY_SAVED_POSITIONS = stringPreferencesKey("saved_positions")
         private val KEY_SAVED_MOVES = intPreferencesKey("saved_moves")
+        private val KEY_SAVED_REMAINING_SECONDS = intPreferencesKey("saved_remaining_seconds")
+        private val KEY_SAVED_CLOCK_MODE = stringPreferencesKey("saved_clock_mode")
+        private val KEY_SAVED_STOPWATCH_SECONDS = intPreferencesKey("saved_stopwatch_seconds")
 
         private fun encodePositions(positions: IntArray): String = positions.joinToString(",")
 
@@ -67,8 +85,12 @@ class GameSettings(context: Context) {
     val savedSessionFlow: Flow<PuzzleSession?> = dataStore.data.map { prefs ->
         decodeSession(
             levelId = prefs[KEY_SAVED_LEVEL],
+            gridSize = prefs[KEY_SAVED_GRID_SIZE],
             positionsText = prefs[KEY_SAVED_POSITIONS],
-            moveCount = prefs[KEY_SAVED_MOVES] ?: 0
+            moveCount = prefs[KEY_SAVED_MOVES] ?: 0,
+            remainingSeconds = prefs[KEY_SAVED_REMAINING_SECONDS],
+            clockMode = prefs[KEY_SAVED_CLOCK_MODE],
+            stopwatchElapsedSeconds = prefs[KEY_SAVED_STOPWATCH_SECONDS] ?: 0
         )
     }
 
@@ -76,42 +98,86 @@ class GameSettings(context: Context) {
         val prefs = dataStore.data.first()
         return decodeSession(
             levelId = prefs[KEY_SAVED_LEVEL],
+            gridSize = prefs[KEY_SAVED_GRID_SIZE],
             positionsText = prefs[KEY_SAVED_POSITIONS],
-            moveCount = prefs[KEY_SAVED_MOVES] ?: 0
+            moveCount = prefs[KEY_SAVED_MOVES] ?: 0,
+            remainingSeconds = prefs[KEY_SAVED_REMAINING_SECONDS],
+            clockMode = prefs[KEY_SAVED_CLOCK_MODE],
+            stopwatchElapsedSeconds = prefs[KEY_SAVED_STOPWATCH_SECONDS] ?: 0
         )
     }
 
     private fun decodeSession(
         levelId: Int?,
+        gridSize: Int?,
         positionsText: String?,
-        moveCount: Int
+        moveCount: Int,
+        remainingSeconds: Int?,
+        clockMode: String?,
+        stopwatchElapsedSeconds: Int
     ): PuzzleSession? {
         val id = levelId ?: return null
         val level = PuzzleLevel.getLevel(id) ?: return null
         val positions = positionsText?.let(::decodePositions) ?: return null
-        if (positions.size != level.gridSize * level.gridSize) return null
+
+        // Backward compatibility: older saves did not persist grid size. Infer it from the tile count.
+        val inferredGridSize = kotlin.math.sqrt(positions.size.toDouble()).toInt()
+            .takeIf { it * it == positions.size }
+        val resolvedGridSize = gridSize ?: inferredGridSize ?: return null
+
+        if (!level.acceptsGridSize(resolvedGridSize)) return null
+        if (positions.size != resolvedGridSize * resolvedGridSize) return null
         if (positions.toSet().size != positions.size) return null
         if (positions.any { it !in positions.indices }) return null
-        return PuzzleSession(id, positions, moveCount.coerceAtLeast(0))
+        return PuzzleSession(
+            id,
+            resolvedGridSize,
+            positions,
+            moveCount.coerceAtLeast(0),
+            remainingSeconds?.coerceAtLeast(0),
+            PuzzleClockMode.fromStored(clockMode),
+            stopwatchElapsedSeconds.coerceAtLeast(0)
+        )
     }
 
-    suspend fun saveSession(levelId: Int, positions: IntArray, moveCount: Int) {
+    suspend fun saveSession(
+        levelId: Int,
+        gridSize: Int,
+        positions: IntArray,
+        moveCount: Int,
+        remainingSeconds: Int? = null,
+        clockMode: PuzzleClockMode = PuzzleClockMode.COUNTDOWN,
+        stopwatchElapsedSeconds: Int = 0
+    ) {
         val level = PuzzleLevel.getLevel(levelId) ?: return
-        if (positions.size != level.gridSize * level.gridSize) return
+        if (!level.acceptsGridSize(gridSize)) return
+        if (positions.size != gridSize * gridSize) return
         if (positions.toSet().size != positions.size || positions.any { it !in positions.indices }) return
 
         dataStore.edit { prefs ->
             prefs[KEY_SAVED_LEVEL] = levelId
+            prefs[KEY_SAVED_GRID_SIZE] = gridSize
             prefs[KEY_SAVED_POSITIONS] = encodePositions(positions)
             prefs[KEY_SAVED_MOVES] = moveCount.coerceAtLeast(0)
+            prefs[KEY_SAVED_CLOCK_MODE] = clockMode.storedValue
+            prefs[KEY_SAVED_STOPWATCH_SECONDS] = stopwatchElapsedSeconds.coerceAtLeast(0)
+            if (remainingSeconds != null) {
+                prefs[KEY_SAVED_REMAINING_SECONDS] = remainingSeconds.coerceAtLeast(0)
+            } else {
+                prefs.remove(KEY_SAVED_REMAINING_SECONDS)
+            }
         }
     }
 
     suspend fun clearSession() {
         dataStore.edit { prefs ->
             prefs.remove(KEY_SAVED_LEVEL)
+            prefs.remove(KEY_SAVED_GRID_SIZE)
             prefs.remove(KEY_SAVED_POSITIONS)
             prefs.remove(KEY_SAVED_MOVES)
+            prefs.remove(KEY_SAVED_REMAINING_SECONDS)
+            prefs.remove(KEY_SAVED_CLOCK_MODE)
+            prefs.remove(KEY_SAVED_STOPWATCH_SECONDS)
         }
     }
 
@@ -179,8 +245,12 @@ class GameSettings(context: Context) {
             prefs.remove(KEY_COMPLETED_LEVELS)
             prefs.remove(KEY_HIGHEST_LEVEL)
             prefs.remove(KEY_SAVED_LEVEL)
+            prefs.remove(KEY_SAVED_GRID_SIZE)
             prefs.remove(KEY_SAVED_POSITIONS)
             prefs.remove(KEY_SAVED_MOVES)
+            prefs.remove(KEY_SAVED_REMAINING_SECONDS)
+            prefs.remove(KEY_SAVED_CLOCK_MODE)
+            prefs.remove(KEY_SAVED_STOPWATCH_SECONDS)
         }
     }
 }

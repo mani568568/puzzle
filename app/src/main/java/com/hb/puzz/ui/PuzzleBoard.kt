@@ -13,7 +13,9 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -86,13 +88,17 @@ fun PuzzleBoard(
     }
 
     BoxWithConstraints(modifier = modifier, contentAlignment = Alignment.Center) {
-        val boardSize = minOf(maxWidth, maxHeight)
-        val tileSize = boardSize / gridSize
-        val tileSizePx = with(density) { tileSize.toPx() }
+        val boardWidth = maxWidth
+        val boardHeight = maxHeight
+        val tileWidth = boardWidth / gridSize
+        val tileHeight = boardHeight / gridSize
+        val tileWidthPx = with(density) { tileWidth.toPx() }
+        val tileHeightPx = with(density) { tileHeight.toPx() }
 
         Box(
             modifier = Modifier
-                .size(boardSize)
+                .width(boardWidth)
+                .height(boardHeight)
                 .background(surface.copy(alpha = 0.96f), RoundedCornerShape(16.dp))
                 .border(2.dp, primary.copy(alpha = 0.56f), RoundedCornerShape(16.dp))
         ) {
@@ -103,24 +109,24 @@ fun PuzzleBoard(
                 val previewTargets = engine.getGroupMoveTargets(anchor, hovered)
                 if (previewTargets != null) {
                     val previewPositions = previewTargets.values.toSet()
-                    Canvas(modifier = Modifier.size(boardSize)) {
+                    Canvas(modifier = Modifier.width(boardWidth).height(boardHeight)) {
                         val mask = Path()
                         previewPositions.forEach { position ->
                             val row = position / gridSize
                             val col = position % gridSize
-                            val left = col * tileSizePx
-                            val top = row * tileSizePx
-                            mask.addRect(Rect(left, top, left + tileSizePx, top + tileSizePx))
+                            val left = col * tileWidthPx
+                            val top = row * tileHeightPx
+                            mask.addRect(Rect(left, top, left + tileWidthPx, top + tileHeightPx))
                         }
                         drawPath(mask, secondary.copy(alpha = 0.10f))
 
                         previewPositions.forEach { position ->
                             val row = position / gridSize
                             val col = position % gridSize
-                            val left = col * tileSizePx
-                            val top = row * tileSizePx
-                            val right = left + tileSizePx
-                            val bottom = top + tileSizePx
+                            val left = col * tileWidthPx
+                            val top = row * tileHeightPx
+                            val right = left + tileWidthPx
+                            val bottom = top + tileHeightPx
                             val stroke = 2.dp.toPx()
                             val color = primary.copy(alpha = 0.68f)
 
@@ -150,8 +156,8 @@ fun PuzzleBoard(
                 key("tile-$tileId") {
                     val row = position / gridSize
                     val col = position % gridSize
-                    val targetX = col * tileSizePx
-                    val targetY = row * tileSizePx
+                    val targetX = col * tileWidthPx
+                    val targetY = row * tileHeightPx
                     val isDragging = tileId in draggingGroupIds
                     val isCelebrating = tileId in celebratingTileIds
                     val celebrationPulse = remember(tileId) { Animatable(1f) }
@@ -172,12 +178,12 @@ fun PuzzleBoard(
 
                     val animatedX by animateFloatAsState(
                         targetValue = targetX,
-                        animationSpec = tween(165, easing = FastOutSlowInEasing),
+                        animationSpec = tween(235, easing = FastOutSlowInEasing),
                         label = "tile-x-$tileId"
                     )
                     val animatedY by animateFloatAsState(
                         targetValue = targetY,
-                        animationSpec = tween(165, easing = FastOutSlowInEasing),
+                        animationSpec = tween(235, easing = FastOutSlowInEasing),
                         label = "tile-y-$tileId"
                     )
                     val dragScale by animateFloatAsState(
@@ -188,12 +194,13 @@ fun PuzzleBoard(
 
                     // Slightly smoother than the previous heavy version, while still controlled.
                     val visualDrag = if (isDragging) {
-                        Offset(dragDelta.x * 0.92f, dragDelta.y * 0.92f)
+                        Offset(dragDelta.x * 0.86f, dragDelta.y * 0.86f)
                     } else Offset.Zero
 
                     Canvas(
                         modifier = Modifier
-                            .size(tileSize)
+                            .width(tileWidth)
+                            .height(tileHeight)
                             .offset {
                                 IntOffset(
                                     (animatedX + visualDrag.x).roundToInt(),
@@ -214,7 +221,7 @@ fun PuzzleBoard(
                                 color = if (isDragging) primary else outline.copy(alpha = 0.24f),
                                 shape = RoundedCornerShape(5.dp)
                             )
-                            .pointerInput(tileId, position, tileSizePx, boardVersion) {
+                            .pointerInput(tileId, position, tileWidthPx, tileHeightPx, boardVersion) {
                                 detectDragGestures(
                                     onDragStart = {
                                         draggingAnchorTileId = tileId
@@ -236,7 +243,8 @@ fun PuzzleBoard(
                                             anchorTileId = tileId,
                                             fallbackPosition = position,
                                             dragDelta = dragDelta,
-                                            tileSizePx = tileSizePx,
+                                            tileWidthPx = tileWidthPx,
+                                            tileHeightPx = tileHeightPx,
                                             gridSize = gridSize
                                         )
                                     }
@@ -261,10 +269,10 @@ fun PuzzleBoard(
                     val maxCol = groupPositions.maxOf { it % gridSize }
                     val widthCells = maxCol - minCol + 1
                     val heightCells = maxRow - minRow + 1
-                    val baseX = minCol * tileSizePx
-                    val baseY = minRow * tileSizePx
-                    val groupWidth = tileSize * widthCells
-                    val groupHeight = tileSize * heightCells
+                    val baseX = minCol * tileWidthPx
+                    val baseY = minRow * tileHeightPx
+                    val groupWidth = tileWidth * widthCells
+                    val groupHeight = tileHeight * heightCells
                     val isDragging = group.any { it in draggingGroupIds }
                     val isCelebrating = group.any { it in celebratingTileIds }
                     val anchorTileId = draggingAnchorTileId?.takeIf { it in group }
@@ -286,12 +294,12 @@ fun PuzzleBoard(
 
                     val animatedX by animateFloatAsState(
                         targetValue = baseX,
-                        animationSpec = tween(170, easing = FastOutSlowInEasing),
+                        animationSpec = tween(240, easing = FastOutSlowInEasing),
                         label = "group-x-$groupKey"
                     )
                     val animatedY by animateFloatAsState(
                         targetValue = baseY,
-                        animationSpec = tween(170, easing = FastOutSlowInEasing),
+                        animationSpec = tween(240, easing = FastOutSlowInEasing),
                         label = "group-y-$groupKey"
                     )
                     val groupScale by animateFloatAsState(
@@ -300,7 +308,7 @@ fun PuzzleBoard(
                         label = "group-scale-$groupKey"
                     )
                     val visualDrag = if (isDragging) {
-                        Offset(dragDelta.x * 0.92f, dragDelta.y * 0.92f)
+                        Offset(dragDelta.x * 0.86f, dragDelta.y * 0.86f)
                     } else Offset.Zero
 
                     Canvas(
@@ -423,17 +431,18 @@ fun PuzzleBoard(
                             val hitBoardCol = hitBoardPosition % gridSize
                             val localHitRow = hitBoardRow - minRow
                             val localHitCol = hitBoardCol - minCol
-                            val hitX = animatedX + localHitCol * tileSizePx + visualDrag.x
-                            val hitY = animatedY + localHitRow * tileSizePx + visualDrag.y
+                            val hitX = animatedX + localHitCol * tileWidthPx + visualDrag.x
+                            val hitY = animatedY + localHitRow * tileHeightPx + visualDrag.y
 
                             Canvas(
                                 modifier = Modifier
-                                    .size(tileSize)
+                                    .width(tileWidth)
+                            .height(tileHeight)
                                     .offset {
                                         IntOffset(hitX.roundToInt(), hitY.roundToInt())
                                     }
                                     .zIndex(if (isDragging) 40f else 18f)
-                                    .pointerInput(groupKey, hitTileId, boardVersion, tileSizePx) {
+                                    .pointerInput(groupKey, hitTileId, boardVersion, tileWidthPx, tileHeightPx) {
                                         detectDragGestures(
                                             onDragStart = {
                                                 draggingAnchorTileId = hitTileId
@@ -463,7 +472,8 @@ fun PuzzleBoard(
                                                     anchorTileId = anchorId,
                                                     fallbackPosition = engine.getPositionOf(anchorId),
                                                     dragDelta = dragDelta,
-                                                    tileSizePx = tileSizePx,
+                                                    tileWidthPx = tileWidthPx,
+                                                    tileHeightPx = tileHeightPx,
                                                     gridSize = gridSize
                                                 )
                                             }
@@ -483,7 +493,8 @@ private fun calculateHoverPosition(
     anchorTileId: Int,
     fallbackPosition: Int,
     dragDelta: Offset,
-    tileSizePx: Float,
+    tileWidthPx: Float,
+    tileHeightPx: Float,
     gridSize: Int
 ): Int? {
     val anchorPosition = engine.getPositionOf(anchorTileId).takeIf { it >= 0 } ?: fallbackPosition
@@ -491,16 +502,17 @@ private fun calculateHoverPosition(
 
     val startRow = anchorPosition / gridSize
     val startCol = anchorPosition % gridSize
-    val centerX = startCol * tileSizePx + tileSizePx / 2f + dragDelta.x
-    val centerY = startRow * tileSizePx + tileSizePx / 2f + dragDelta.y
-    val boardPixels = tileSizePx * gridSize
+    val centerX = startCol * tileWidthPx + tileWidthPx / 2f + dragDelta.x
+    val centerY = startRow * tileHeightPx + tileHeightPx / 2f + dragDelta.y
+    val boardWidthPx = tileWidthPx * gridSize
+    val boardHeightPx = tileHeightPx * gridSize
 
-    if (centerX < 0f || centerY < 0f || centerX >= boardPixels || centerY >= boardPixels) {
+    if (centerX < 0f || centerY < 0f || centerX >= boardWidthPx || centerY >= boardHeightPx) {
         return null
     }
 
-    val targetCol = floor(centerX / tileSizePx).toInt()
-    val targetRow = floor(centerY / tileSizePx).toInt()
+    val targetCol = floor(centerX / tileWidthPx).toInt()
+    val targetRow = floor(centerY / tileHeightPx).toInt()
     val candidate = targetRow * gridSize + targetCol
     return candidate.takeIf { engine.getGroupMoveTargets(anchorTileId, it) != null }
 }

@@ -18,12 +18,11 @@ import kotlinx.coroutines.launch
 
 private object Routes {
     const val HOME = "home"
-    const val LEVELS = "levels"
     const val SETTINGS = "settings"
     const val HOW_TO = "how_to"
-    const val GAME_PATTERN = "game/{levelId}"
+    const val GAME_PATTERN = "game/{levelId}/{gridSize}"
 
-    fun game(levelId: Int) = "game/$levelId"
+    fun game(levelId: Int, gridSize: Int) = "game/$levelId/$gridSize"
 }
 
 @Composable
@@ -50,29 +49,33 @@ fun CozyBlocksApp(settings: GameSettings) {
 
     NavHost(navController = navController, startDestination = Routes.HOME) {
         composable(Routes.HOME) {
+            val currentChapter = if (completedLevels.size >= PuzzleLevel.maxLevelId) {
+                PuzzleLevel.maxLevelId
+            } else {
+                highestLevel
+            }
+            val currentLevel = PuzzleLevel.requireLevel(currentChapter)
+            val currentChapterTitle = currentLevel.title
             HomeScreen(
                 hasSavedGame = savedSession != null,
+                currentChapter = currentChapter,
+                currentChapterTitle = currentChapterTitle,
+                currentDifficulty = currentLevel.difficulty.displayLabel,
+                currentGridDescription = currentLevel.gridDescription,
+                journeyComplete = completedLevels.size >= PuzzleLevel.maxLevelId,
                 onContinue = {
-                    val levelId = savedSession?.levelId ?: highestLevel
-                    navController.navigate(Routes.game(levelId))
+                    val chapterId = savedSession?.levelId ?: currentChapter
+                    val chapter = PuzzleLevel.requireLevel(chapterId)
+                    val gridSize = savedSession?.takeIf { it.levelId == chapterId }?.gridSize
+                        ?: chapter.pickGridSize()
+                    navController.navigate(Routes.game(chapterId, gridSize))
                 },
-                onStartNewGame = { navController.navigate(Routes.LEVELS) },
+                onStartJourney = {
+                    val gridSize = currentLevel.pickGridSize()
+                    navController.navigate(Routes.game(currentChapter, gridSize))
+                },
                 onHowToPlay = { navController.navigate(Routes.HOW_TO) },
                 onSettings = { navController.navigate(Routes.SETTINGS) }
-            )
-        }
-
-        composable(Routes.LEVELS) {
-            LevelSelectionScreen(
-                highestUnlockedLevel = highestLevel,
-                completedLevels = completedLevels,
-                onBack = { navController.popBackStack() },
-                onLevelSelected = { levelId ->
-                    scope.launch {
-                        settings.clearSession()
-                        navController.navigate(Routes.game(levelId))
-                    }
-                }
             )
         }
 
@@ -103,13 +106,20 @@ fun CozyBlocksApp(settings: GameSettings) {
 
         composable(
             route = Routes.GAME_PATTERN,
-            arguments = listOf(navArgument("levelId") { type = NavType.IntType })
+            arguments = listOf(
+                navArgument("levelId") { type = NavType.IntType },
+                navArgument("gridSize") { type = NavType.IntType }
+            )
         ) { entry ->
             val levelId = (entry.arguments?.getInt("levelId") ?: 1)
                 .coerceIn(1, PuzzleLevel.maxLevelId)
+            val level = PuzzleLevel.requireLevel(levelId)
+            val requestedGridSize = entry.arguments?.getInt("gridSize") ?: level.gridSize
+            val gridSize = requestedGridSize.takeIf(level::acceptsGridSize) ?: level.gridSize
 
             PicturePuzzleGameScreen(
                 levelId = levelId,
+                gridSize = gridSize,
                 settings = settings,
                 imageRepository = imageRepository,
                 imageSource = imageSource,
@@ -118,7 +128,8 @@ fun CozyBlocksApp(settings: GameSettings) {
                 onBack = { navController.popBackStack() },
                 onHome = { goHome() },
                 onNextLevel = { nextLevel ->
-                    navController.navigate(Routes.game(nextLevel)) {
+                    val next = PuzzleLevel.requireLevel(nextLevel)
+                    navController.navigate(Routes.game(nextLevel, next.pickGridSize())) {
                         popUpTo(Routes.HOME) { inclusive = false }
                     }
                 }

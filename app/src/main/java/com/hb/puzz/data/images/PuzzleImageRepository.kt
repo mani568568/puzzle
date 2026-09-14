@@ -43,7 +43,7 @@ class PuzzleImageRepository(
         if (!pexelsApi.isConfigured()) {
             return@withContext fallback(
                 level,
-                "Pexels is selected, but no API key is configured. Using the preloaded image."
+                "Preloaded image • Add a Pexels API key to enable online photos."
             )
         }
 

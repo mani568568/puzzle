@@ -9,15 +9,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -40,13 +36,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.hb.puzz.data.images.ImageSourceMode
-import com.hb.puzz.domain.PuzzleLevel
 
 @Composable
 fun HomeScreen(
     hasSavedGame: Boolean,
+    currentChapter: Int,
+    currentChapterTitle: String,
+    currentDifficulty: String,
+    currentGridDescription: String,
+    journeyComplete: Boolean,
     onContinue: () -> Unit,
-    onStartNewGame: () -> Unit,
+    onStartJourney: () -> Unit,
     onHowToPlay: () -> Unit,
     onSettings: () -> Unit,
     modifier: Modifier = Modifier
@@ -60,28 +60,60 @@ fun HomeScreen(
         verticalArrangement = Arrangement.Center
     ) {
         Text(
-            text = "Cozy Picture Blocks",
+            text = "Cozy Picture Journey",
             style = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.Bold),
             color = MaterialTheme.colorScheme.primary
         )
-        Spacer(Modifier.height(12.dp))
-        Text("Drag picture blocks into place to restore the artwork.", style = MaterialTheme.typography.bodyLarge)
-        Spacer(Modifier.height(40.dp))
+        Spacer(Modifier.height(10.dp))
+        Text(
+            "Restore each picture to reveal the next chapter.",
+            style = MaterialTheme.typography.bodyLarge
+        )
+        Spacer(Modifier.height(28.dp))
 
-        if (hasSavedGame) {
-            Button(
-                onClick = onContinue,
-                modifier = Modifier.fillMaxWidth(0.8f).height(56.dp),
-                shape = CircleShape
-            ) { Text("Continue") }
-            Spacer(Modifier.height(12.dp))
+        Card(modifier = Modifier.fillMaxWidth(0.84f)) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    if (journeyComplete) "Journey Complete" else "Current Chapter",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    if (journeyComplete) "All pictures restored ✨" else "Chapter $currentChapter · $currentChapterTitle",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                if (!journeyComplete) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "$currentGridDescription  •  $currentDifficulty",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
         }
 
+        Spacer(Modifier.height(24.dp))
+
         Button(
-            onClick = onStartNewGame,
+            onClick = if (hasSavedGame) onContinue else onStartJourney,
             modifier = Modifier.fillMaxWidth(0.8f).height(56.dp),
             shape = CircleShape
-        ) { Text("Choose Level") }
+        ) {
+            Text(
+                when {
+                    hasSavedGame -> "Continue Journey"
+                    journeyComplete -> "Replay Final Chapter"
+                    currentChapter == 1 -> "Begin Journey"
+                    else -> "Start Chapter $currentChapter"
+                }
+            )
+        }
 
         Spacer(Modifier.height(12.dp))
         OutlinedButton(
@@ -93,50 +125,6 @@ fun HomeScreen(
         Spacer(Modifier.height(20.dp))
         IconButton(onClick = onSettings) {
             Icon(Icons.Default.Settings, contentDescription = "Settings")
-        }
-    }
-}
-
-@Composable
-fun LevelSelectionScreen(
-    highestUnlockedLevel: Int,
-    completedLevels: Set<Int>,
-    onBack: () -> Unit,
-    onLevelSelected: (Int) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(16.dp)
-    ) {
-        ScreenHeader(title = "Choose a Level", onBack = onBack)
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            items(PuzzleLevel.ALL_LEVELS, key = { it.id }) { level ->
-                val unlocked = level.id <= highestUnlockedLevel
-                val completed = level.id in completedLevels
-                Card(
-                    onClick = { if (unlocked) onLevelSelected(level.id) },
-                    enabled = unlocked,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column {
-                            Text("Level ${level.id} · ${level.title}", fontWeight = FontWeight.SemiBold)
-                            Text(
-                                "${level.gridSize} × ${level.gridSize} · ${level.difficulty.name.lowercase().replaceFirstChar { it.uppercase() }}",
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
-                        when {
-                            completed -> Icon(Icons.Default.CheckCircle, contentDescription = "Completed")
-                            !unlocked -> Icon(Icons.Default.Lock, contentDescription = "Locked")
-                        }
-                    }
-                }
-            }
         }
     }
 }
@@ -170,7 +158,7 @@ fun SettingsScreen(
         Text("Puzzle Images", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(6.dp))
         Text(
-            "Choose live Pexels photos or the artwork bundled with the app.",
+            "Choose live Pexels photos or artwork bundled with the journey.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -200,8 +188,8 @@ fun SettingsScreen(
     if (confirmReset) {
         AlertDialog(
             onDismissRequest = { confirmReset = false },
-            title = { Text("Reset progress?") },
-            text = { Text("Completed levels and the saved puzzle will be cleared. Your settings and cached Pexels photos will stay unchanged.") },
+            title = { Text("Reset journey progress?") },
+            text = { Text("Completed chapters and the saved puzzle will be cleared. Your settings and cached Pexels photos will stay unchanged.") },
             confirmButton = {
                 TextButton(onClick = {
                     confirmReset = false
@@ -262,7 +250,9 @@ fun HowToPlayScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
         Spacer(Modifier.height(16.dp))
         Text("4. You can choose Pexels photos or bundled offline artwork in Settings.", style = MaterialTheme.typography.bodyLarge)
         Spacer(Modifier.height(16.dp))
-        Text("5. Completing a level unlocks the next one. Later levels use larger 4×4 and 5×5 grids.", style = MaterialTheme.typography.bodyLarge)
+        Text("5. Chapters 1–5 use 4×4 grids. Later chapters grow through 5×5, 6×6, 7×7 and 8×8, with surprise-grid chapters near the end.", style = MaterialTheme.typography.bodyLarge)
+        Spacer(Modifier.height(16.dp))
+        Text("6. Difficulty grows from Easy · Cozy Start to Medium · Focus Flow and Hard · Master Quest.", style = MaterialTheme.typography.bodyLarge)
     }
 }
 
