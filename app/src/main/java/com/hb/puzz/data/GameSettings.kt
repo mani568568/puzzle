@@ -34,7 +34,8 @@ data class PuzzleSession(
     val moveCount: Int,
     val remainingSeconds: Int? = null,
     val clockMode: PuzzleClockMode = PuzzleClockMode.COUNTDOWN,
-    val stopwatchElapsedSeconds: Int = 0
+    val stopwatchElapsedSeconds: Int = 0,
+    val timerStarted: Boolean = false
 )
 
 /** Single source of truth for picture-puzzle progress and user preferences. */
@@ -56,6 +57,7 @@ class GameSettings(context: Context) {
         private val KEY_SAVED_REMAINING_SECONDS = intPreferencesKey("saved_remaining_seconds")
         private val KEY_SAVED_CLOCK_MODE = stringPreferencesKey("saved_clock_mode")
         private val KEY_SAVED_STOPWATCH_SECONDS = intPreferencesKey("saved_stopwatch_seconds")
+        private val KEY_SAVED_TIMER_STARTED = booleanPreferencesKey("saved_timer_started")
 
         private fun encodePositions(positions: IntArray): String = positions.joinToString(",")
 
@@ -90,7 +92,8 @@ class GameSettings(context: Context) {
             moveCount = prefs[KEY_SAVED_MOVES] ?: 0,
             remainingSeconds = prefs[KEY_SAVED_REMAINING_SECONDS],
             clockMode = prefs[KEY_SAVED_CLOCK_MODE],
-            stopwatchElapsedSeconds = prefs[KEY_SAVED_STOPWATCH_SECONDS] ?: 0
+            stopwatchElapsedSeconds = prefs[KEY_SAVED_STOPWATCH_SECONDS] ?: 0,
+            timerStarted = prefs[KEY_SAVED_TIMER_STARTED] ?: false
         )
     }
 
@@ -103,7 +106,8 @@ class GameSettings(context: Context) {
             moveCount = prefs[KEY_SAVED_MOVES] ?: 0,
             remainingSeconds = prefs[KEY_SAVED_REMAINING_SECONDS],
             clockMode = prefs[KEY_SAVED_CLOCK_MODE],
-            stopwatchElapsedSeconds = prefs[KEY_SAVED_STOPWATCH_SECONDS] ?: 0
+            stopwatchElapsedSeconds = prefs[KEY_SAVED_STOPWATCH_SECONDS] ?: 0,
+            timerStarted = prefs[KEY_SAVED_TIMER_STARTED] ?: false
         )
     }
 
@@ -114,7 +118,8 @@ class GameSettings(context: Context) {
         moveCount: Int,
         remainingSeconds: Int?,
         clockMode: String?,
-        stopwatchElapsedSeconds: Int
+        stopwatchElapsedSeconds: Int,
+        timerStarted: Boolean
     ): PuzzleSession? {
         val id = levelId ?: return null
         val level = PuzzleLevel.getLevel(id) ?: return null
@@ -136,7 +141,8 @@ class GameSettings(context: Context) {
             moveCount.coerceAtLeast(0),
             remainingSeconds?.coerceAtLeast(0),
             PuzzleClockMode.fromStored(clockMode),
-            stopwatchElapsedSeconds.coerceAtLeast(0)
+            stopwatchElapsedSeconds.coerceAtLeast(0),
+            timerStarted
         )
     }
 
@@ -147,7 +153,8 @@ class GameSettings(context: Context) {
         moveCount: Int,
         remainingSeconds: Int? = null,
         clockMode: PuzzleClockMode = PuzzleClockMode.COUNTDOWN,
-        stopwatchElapsedSeconds: Int = 0
+        stopwatchElapsedSeconds: Int = 0,
+        timerStarted: Boolean = false
     ) {
         val level = PuzzleLevel.getLevel(levelId) ?: return
         if (!level.acceptsGridSize(gridSize)) return
@@ -161,6 +168,7 @@ class GameSettings(context: Context) {
             prefs[KEY_SAVED_MOVES] = moveCount.coerceAtLeast(0)
             prefs[KEY_SAVED_CLOCK_MODE] = clockMode.storedValue
             prefs[KEY_SAVED_STOPWATCH_SECONDS] = stopwatchElapsedSeconds.coerceAtLeast(0)
+            prefs[KEY_SAVED_TIMER_STARTED] = timerStarted
             if (remainingSeconds != null) {
                 prefs[KEY_SAVED_REMAINING_SECONDS] = remainingSeconds.coerceAtLeast(0)
             } else {
@@ -178,6 +186,7 @@ class GameSettings(context: Context) {
             prefs.remove(KEY_SAVED_REMAINING_SECONDS)
             prefs.remove(KEY_SAVED_CLOCK_MODE)
             prefs.remove(KEY_SAVED_STOPWATCH_SECONDS)
+            prefs.remove(KEY_SAVED_TIMER_STARTED)
         }
     }
 
@@ -251,6 +260,7 @@ class GameSettings(context: Context) {
             prefs.remove(KEY_SAVED_REMAINING_SECONDS)
             prefs.remove(KEY_SAVED_CLOCK_MODE)
             prefs.remove(KEY_SAVED_STOPWATCH_SECONDS)
+            prefs.remove(KEY_SAVED_TIMER_STARTED)
         }
     }
 }

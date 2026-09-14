@@ -5,10 +5,13 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.border
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -24,12 +27,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -52,12 +57,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.hb.puzz.data.GameSettings
 import com.hb.puzz.data.PuzzleClockMode
@@ -69,7 +76,6 @@ import com.hb.puzz.domain.PuzzleLevel
 import com.hb.puzz.ui.feedback.PuzzleFeedbackPlayer
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlin.math.abs
 
 @Composable
 fun PicturePuzzleGameScreen(
@@ -101,9 +107,11 @@ fun PicturePuzzleGameScreen(
     var moveCount by remember(level.id, activeGridSize) { mutableIntStateOf(0) }
     var boardVersion by remember(level.id, activeGridSize) { mutableIntStateOf(0) }
     var isSolved by remember(level.id, activeGridSize) { mutableStateOf(false) }
-    var isPaused by remember(level.id, activeGridSize) { mutableStateOf(false) }
     var timeExpired by remember(level.id, activeGridSize) { mutableStateOf(false) }
     var remainingSeconds by remember(level.id, activeGridSize) { mutableIntStateOf(initialChallengeSeconds) }
+    var timerStarted by remember(level.id, activeGridSize) { mutableStateOf(false) }
+    var timerRunning by remember(level.id, activeGridSize) { mutableStateOf(false) }
+    var timerExpanded by remember(level.id, activeGridSize) { mutableStateOf(false) }
     var stopwatchElapsedSeconds by remember(level.id, activeGridSize) { mutableIntStateOf(0) }
     var clockMode by remember(level.id, activeGridSize) { mutableStateOf(PuzzleClockMode.COUNTDOWN) }
     var initialized by remember(level.id, activeGridSize) { mutableStateOf(false) }
@@ -131,15 +139,20 @@ fun PicturePuzzleGameScreen(
         if (saved?.levelId == level.id && saved.gridSize == activeGridSize && engine.restorePositions(saved.positions)) {
             moveCount = saved.moveCount
             remainingSeconds = saved.remainingSeconds ?: initialChallengeSeconds
-            stopwatchElapsedSeconds = saved.stopwatchElapsedSeconds
-            clockMode = saved.clockMode
+            stopwatchElapsedSeconds = 0
+            clockMode = PuzzleClockMode.COUNTDOWN
+            timerStarted = saved.timerStarted
+            timerRunning = false
+            timerExpanded = false
             isSolved = engine.isSolved()
-            timeExpired = clockMode == PuzzleClockMode.COUNTDOWN && remainingSeconds <= 0 && !isSolved
-            isPaused = timeExpired
+            timeExpired = timerStarted && remainingSeconds <= 0 && !isSolved
         } else {
             remainingSeconds = initialChallengeSeconds
             stopwatchElapsedSeconds = 0
             clockMode = PuzzleClockMode.COUNTDOWN
+            timerStarted = false
+            timerRunning = false
+            timerExpanded = false
             settings.saveSession(
                 level.id,
                 activeGridSize,
@@ -147,7 +160,8 @@ fun PicturePuzzleGameScreen(
                 0,
                 remainingSeconds,
                 clockMode,
-                stopwatchElapsedSeconds
+                stopwatchElapsedSeconds,
+                timerStarted
             )
         }
         refreshConnectionState()
@@ -165,44 +179,28 @@ fun PicturePuzzleGameScreen(
         imageLoading = false
     }
 
-    // Countdown mode: reaching 00:00 ends the attempt. The only way to continue is Restart.
-    LaunchedEffect(initialized, isPaused, isSolved, imageLoading, puzzleImage, level.id, activeGridSize, clockMode) {
-        if (clockMode != PuzzleClockMode.COUNTDOWN) return@LaunchedEffect
-        if (!initialized || isPaused || isSolved || imageLoading || puzzleImage == null) return@LaunchedEffect
-        while (!isPaused && !isSolved && clockMode == PuzzleClockMode.COUNTDOWN && remainingSeconds > 0) {
+    // The challenge clock only runs after the player explicitly presses Start or resumes it.
+    LaunchedEffect(initialized, timerRunning, isSolved, imageLoading, puzzleImage, level.id, activeGridSize) {
+        if (!initialized || !timerRunning || isSolved || imageLoading || puzzleImage == null || timeExpired) {
+            return@LaunchedEffect
+        }
+        while (timerRunning && !isSolved && remainingSeconds > 0) {
             delay(1_000)
-            if (!isPaused && !isSolved && clockMode == PuzzleClockMode.COUNTDOWN && remainingSeconds > 0) {
+            if (timerRunning && !isSolved && remainingSeconds > 0) {
                 remainingSeconds--
                 if (remainingSeconds % 5 == 0) {
                     settings.saveSession(
                         level.id, activeGridSize, engine.getCurrentPositions(), moveCount,
-                        remainingSeconds, clockMode, stopwatchElapsedSeconds
+                        remainingSeconds, PuzzleClockMode.COUNTDOWN, 0, timerStarted
                     )
                 }
                 if (remainingSeconds == 0) {
                     timeExpired = true
-                    isPaused = true
+                    timerRunning = false
+                    timerExpanded = false
                     settings.saveSession(
                         level.id, activeGridSize, engine.getCurrentPositions(), moveCount,
-                        0, clockMode, stopwatchElapsedSeconds
-                    )
-                }
-            }
-        }
-    }
-
-    // Stopwatch mode: counts upward with no timeout. Pause freezes it just like countdown mode.
-    LaunchedEffect(initialized, isPaused, isSolved, imageLoading, puzzleImage, level.id, activeGridSize, clockMode) {
-        if (clockMode != PuzzleClockMode.STOPWATCH) return@LaunchedEffect
-        if (!initialized || isPaused || isSolved || imageLoading || puzzleImage == null) return@LaunchedEffect
-        while (!isPaused && !isSolved && clockMode == PuzzleClockMode.STOPWATCH) {
-            delay(1_000)
-            if (!isPaused && !isSolved && clockMode == PuzzleClockMode.STOPWATCH) {
-                stopwatchElapsedSeconds++
-                if (stopwatchElapsedSeconds % 5 == 0) {
-                    settings.saveSession(
-                        level.id, activeGridSize, engine.getCurrentPositions(), moveCount,
-                        remainingSeconds, clockMode, stopwatchElapsedSeconds
+                        0, PuzzleClockMode.COUNTDOWN, 0, true
                     )
                 }
             }
@@ -244,31 +242,50 @@ fun PicturePuzzleGameScreen(
         }
     }
 
-    fun adjustChallengeTime(deltaSeconds: Int) {
-        if (clockMode != PuzzleClockMode.COUNTDOWN || timeExpired) return
-        val upperLimit = (initialChallengeSeconds + 10 * 60).coerceAtMost(30 * 60)
-        remainingSeconds = (remainingSeconds + deltaSeconds).coerceIn(30, upperLimit)
+    fun persistTimerState() {
         scope.launch {
             settings.saveSession(
-                level.id, activeGridSize, engine.getCurrentPositions(), moveCount,
-                remainingSeconds, clockMode, stopwatchElapsedSeconds
+                level.id,
+                activeGridSize,
+                engine.getCurrentPositions(),
+                moveCount,
+                remainingSeconds,
+                PuzzleClockMode.COUNTDOWN,
+                0,
+                timerStarted
             )
         }
     }
 
-    fun switchClockMode() {
+    fun adjustChallengeTime(deltaSeconds: Int) {
+        if (timeExpired || isSolved) return
+        val upperLimit = (initialChallengeSeconds + 10 * 60).coerceAtMost(30 * 60)
+        remainingSeconds = (remainingSeconds + deltaSeconds).coerceIn(30, upperLimit)
+        persistTimerState()
+    }
+
+    fun openOrResumeTimer() {
         if (!initialized || isSolved || timeExpired) return
-        clockMode = if (clockMode == PuzzleClockMode.COUNTDOWN) {
-            PuzzleClockMode.STOPWATCH
-        } else {
-            PuzzleClockMode.COUNTDOWN
+        timerExpanded = true
+        if (timerStarted) {
+            timerRunning = true
+            persistTimerState()
         }
-        scope.launch {
-            settings.saveSession(
-                level.id, activeGridSize, engine.getCurrentPositions(), moveCount,
-                remainingSeconds, clockMode, stopwatchElapsedSeconds
-            )
-        }
+    }
+
+    fun startTimer() {
+        if (!initialized || isSolved || timeExpired) return
+        timerStarted = true
+        timerRunning = true
+        timerExpanded = true
+        persistTimerState()
+    }
+
+    fun pauseAndCollapseTimer() {
+        if (!timerRunning || isSolved) return
+        timerRunning = false
+        timerExpanded = false
+        persistTimerState()
     }
 
     fun restart() {
@@ -276,6 +293,10 @@ fun PicturePuzzleGameScreen(
         moveCount = 0
         remainingSeconds = initialChallengeSeconds
         stopwatchElapsedSeconds = 0
+        clockMode = PuzzleClockMode.COUNTDOWN
+        timerStarted = false
+        timerRunning = false
+        timerExpanded = false
         timeExpired = false
         isSolved = false
         celebratingTileIds = emptySet()
@@ -290,17 +311,19 @@ fun PicturePuzzleGameScreen(
                 engine.getCurrentPositions(),
                 0,
                 remainingSeconds,
-                clockMode,
-                stopwatchElapsedSeconds
+                PuzzleClockMode.COUNTDOWN,
+                0,
+                false
             )
         }
     }
 
+    // Warm cream backdrop: calm enough for long play sessions while keeping the artwork vivid.
     val gameBackground = Brush.verticalGradient(
         colors = listOf(
-            MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.82f),
-            MaterialTheme.colorScheme.background,
-            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.68f)
+            Color(0xFFFFF7E8),
+            Color(0xFFF9EEDB),
+            Color(0xFFF3E6D2)
         )
     )
 
@@ -311,111 +334,122 @@ fun PicturePuzzleGameScreen(
             .padding(horizontal = 2.dp)
     ) {
         // Keep the controls compact and let the board use the phone as a portrait rectangle.
-        val topZone = 150.dp
-        val bottomZone = 104.dp
+        val topZone = 148.dp
+        val bottomZone = 112.dp
         val horizontalBoardSpace = (maxWidth - 4.dp).coerceAtLeast(220.dp)
         val verticalBoardSpace = (maxHeight - topZone - bottomZone).coerceAtLeast(300.dp)
         val boardWidth = horizontalBoardSpace
-        val boardHeight = minOf(verticalBoardSpace, boardWidth * 1.28f)
+        // Keep the portrait feel, but do not stretch the image too far toward the bottom deck.
+        val boardHeight = minOf(verticalBoardSpace, boardWidth * 1.33f)
         val connectionProgress = if (totalConnections == 0) 0f
         else (connectionCount.toFloat() / totalConnections.toFloat()).coerceIn(0f, 1f)
 
-        // Soft ambient layers keep attention around the puzzle without competing with the photo.
+        // TOP SAFE HUD: there is exactly ONE stateful timer control in the header.
+        // Idle/paused -> Timer icon. Running -> the same control becomes Pause.
+        // No separate Pause and Timer buttons are rendered at the same time.
         Box(
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .size(190.dp)
-                .background(
-                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.18f),
-                    CircleShape
-                )
-        )
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .size(220.dp)
-                .background(
-                    MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.18f),
-                    CircleShape
-                )
-        )
-
-        // TOP ~1 INCH: compact journey HUD.
-        Surface(
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
                 .statusBarsPadding()
-                .padding(top = 10.dp, start = 6.dp, end = 6.dp),
-            shape = RoundedCornerShape(28.dp),
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.86f),
-            tonalElevation = 8.dp,
-            shadowElevation = 8.dp
+                .padding(top = 10.dp, start = 10.dp, end = 10.dp)
         ) {
             Column(
-                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    Surface(
+                        modifier = Modifier.align(Alignment.CenterStart),
+                        shape = CircleShape,
+                        color = Color(0xFFFFFBF3).copy(alpha = 0.96f)
+                    ) {
+                        IconButton(onClick = onBack) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Back",
+                                tint = Color(0xFF354A46)
+                            )
+                        }
                     }
 
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Column(
+                        modifier = Modifier.align(Alignment.Center),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
                         Text(
                             "Chapter ${level.id} · ${level.title}",
+                            modifier = Modifier.widthIn(max = 205.dp),
                             style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color(0xFF2E403D),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                         Text(
                             "$activeGridSize×$activeGridSize · ${level.difficulty.shortLabel} · Par $parMoves moves",
+                            modifier = Modifier.widthIn(max = 220.dp),
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = Color(0xFF746E63),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
 
-                    IconButton(onClick = { isPaused = true }, enabled = initialized && !isSolved) {
-                        Icon(Icons.Default.Pause, contentDescription = "Pause")
+                    Surface(
+                        modifier = Modifier.align(Alignment.CenterEnd),
+                        shape = CircleShape,
+                        color = if (timerRunning) Color(0xFF2F7779) else Color(0xFFFFFBF3).copy(alpha = 0.96f),
+                        tonalElevation = 3.dp,
+                        shadowElevation = 4.dp
+                    ) {
+                        IconButton(
+                            onClick = {
+                                // One control, two visual states.
+                                // Timer -> expand/resume. Pause -> pause/collapse.
+                                if (timerRunning) {
+                                    pauseAndCollapseTimer()
+                                } else {
+                                    openOrResumeTimer()
+                                }
+                            },
+                            enabled = initialized && !isSolved && !timeExpired
+                        ) {
+                            Icon(
+                                imageVector = if (timerRunning) Icons.Default.Pause else Icons.Default.Timer,
+                                contentDescription = if (timerRunning) "Pause challenge timer" else "Open challenge timer",
+                                tint = if (timerRunning) Color.White else Color(0xFF354A46)
+                            )
+                        }
                     }
                 }
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
+                Spacer(Modifier.height(8.dp))
+
+                AnimatedVisibility(
+                    visible = timerExpanded && !timeExpired,
+                    enter = fadeIn(tween(260)) +
+                        scaleIn(tween(420, easing = FastOutSlowInEasing), initialScale = 0.78f) +
+                        slideInHorizontally(tween(420, easing = FastOutSlowInEasing)) { it / 3 },
+                    exit = fadeOut(tween(180)) +
+                        scaleOut(tween(340, easing = FastOutSlowInEasing), targetScale = 0.78f) +
+                        slideOutHorizontally(tween(340, easing = FastOutSlowInEasing)) { it / 3 }
                 ) {
                     Surface(
                         modifier = Modifier
-                            .fillMaxWidth(0.86f)
-                            .pointerInput(clockMode, initialized, isSolved, timeExpired) {
-                                var swipeDistance = 0f
-                                detectHorizontalDragGestures(
-                                    onDragStart = { swipeDistance = 0f },
-                                    onHorizontalDrag = { change, dragAmount ->
-                                        change.consume()
-                                        swipeDistance += dragAmount
-                                    },
-                                    onDragEnd = {
-                                        if (abs(swipeDistance) > 70f) switchClockMode()
-                                        swipeDistance = 0f
-                                    },
-                                    onDragCancel = { swipeDistance = 0f }
-                                )
-                            },
-                        shape = RoundedCornerShape(28.dp),
-                        color = if (clockMode == PuzzleClockMode.COUNTDOWN && remainingSeconds <= 60) {
-                            MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.96f)
-                        } else {
-                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.92f)
-                        },
-                        tonalElevation = 3.dp
+                            .fillMaxWidth(0.88f)
+                            .border(
+                                1.dp,
+                                Color(0xFF78A7A1).copy(alpha = 0.55f),
+                                RoundedCornerShape(26.dp)
+                            ),
+                        shape = RoundedCornerShape(26.dp),
+                        color = if (remainingSeconds <= 60) Color(0xFFFFE4DA) else Color(0xFFFFFBF3),
+                        tonalElevation = 3.dp,
+                        shadowElevation = 7.dp
                     ) {
                         Column(
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Row(
@@ -423,50 +457,68 @@ fun PicturePuzzleGameScreen(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                if (clockMode == PuzzleClockMode.COUNTDOWN) {
-                                    IconButton(
-                                        onClick = { adjustChallengeTime(-30) },
-                                        enabled = initialized && !isSolved && !timeExpired && remainingSeconds > 30,
-                                        modifier = Modifier.size(36.dp)
-                                    ) { Text("−30", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold) }
-                                } else {
-                                    Text("←", modifier = Modifier.padding(horizontal = 14.dp), fontWeight = FontWeight.Bold)
+                                IconButton(
+                                    onClick = { adjustChallengeTime(-30) },
+                                    enabled = initialized && !isSolved && remainingSeconds > 30,
+                                    modifier = Modifier.size(40.dp)
+                                ) {
+                                    Text(
+                                        "−30",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = Color(0xFF354A46)
+                                    )
                                 }
 
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    val shownSeconds = if (clockMode == PuzzleClockMode.COUNTDOWN) remainingSeconds else stopwatchElapsedSeconds
                                     Text(
-                                        formatChallengeTime(shownSeconds),
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = if (clockMode == PuzzleClockMode.COUNTDOWN && remainingSeconds <= 60) {
+                                        formatChallengeTime(remainingSeconds),
+                                        style = MaterialTheme.typography.headlineSmall,
+                                        fontWeight = FontWeight.Black,
+                                        color = if (remainingSeconds <= 60) {
                                             MaterialTheme.colorScheme.onErrorContainer
                                         } else {
-                                            MaterialTheme.colorScheme.onPrimaryContainer
+                                            Color(0xFF2F6765)
                                         }
                                     )
                                     Text(
-                                        "${if (clockMode == PuzzleClockMode.COUNTDOWN) "COUNTDOWN" else "STOPWATCH"} · $moveCount moves",
+                                        if (timerRunning) "CHALLENGE CLOCK · RUNNING" else "CHALLENGE CLOCK",
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        color = Color(0xFF5E655F)
                                     )
                                 }
 
-                                if (clockMode == PuzzleClockMode.COUNTDOWN) {
-                                    IconButton(
-                                        onClick = { adjustChallengeTime(30) },
-                                        enabled = initialized && !isSolved && !timeExpired,
-                                        modifier = Modifier.size(36.dp)
-                                    ) { Text("+30", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold) }
-                                } else {
-                                    Text("→", modifier = Modifier.padding(horizontal = 14.dp), fontWeight = FontWeight.Bold)
+                                IconButton(
+                                    onClick = { adjustChallengeTime(30) },
+                                    enabled = initialized && !isSolved,
+                                    modifier = Modifier.size(40.dp)
+                                ) {
+                                    Text(
+                                        "+30",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = Color(0xFF354A46)
+                                    )
                                 }
                             }
-                            Text(
-                                "Swipe ↔ to switch ${if (clockMode == PuzzleClockMode.COUNTDOWN) "to stopwatch" else "to countdown"}",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f)
-                            )
+
+                            if (!timerStarted) {
+                                Spacer(Modifier.height(4.dp))
+                                Button(
+                                    onClick = { startTimer() },
+                                    enabled = initialized && !isSolved
+                                ) {
+                                    Icon(Icons.Default.Timer, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("Start timer")
+                                }
+                            } else {
+                                Text(
+                                    "$moveCount moves · use the same top-right control to pause",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color(0xFF77766E).copy(alpha = 0.88f)
+                                )
+                            }
                         }
                     }
                 }
@@ -478,16 +530,16 @@ fun PicturePuzzleGameScreen(
         Surface(
             modifier = Modifier
                 .align(Alignment.Center)
-                .offset(y = 30.dp)
+                .offset(y = 22.dp)
                 .width(boardWidth + 6.dp)
                 .height(boardHeight + 6.dp),
-            shape = RoundedCornerShape(26.dp),
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.36f),
-            tonalElevation = 4.dp,
-            shadowElevation = 12.dp
+            shape = RoundedCornerShape(13.dp),
+            color = Color(0xFFFFF8EC),
+            tonalElevation = 2.dp,
+            shadowElevation = 10.dp
         ) {
             Box(
-                modifier = Modifier.padding(3.dp),
+                modifier = Modifier.padding(2.dp),
                 contentAlignment = Alignment.Center
             ) {
                 when {
@@ -532,6 +584,8 @@ fun PicturePuzzleGameScreen(
                                         boardVersion++
 
                                         if (solvedNow) {
+                                            timerRunning = false
+                                            timerExpanded = false
                                             celebratingTileIds = (0 until engine.getTotalTiles()).toSet()
                                             celebrationVersion++
                                             if (soundEnabled) feedback.playSolvedSound()
@@ -556,8 +610,9 @@ fun PicturePuzzleGameScreen(
                                                     engine.getCurrentPositions(),
                                                     moveCount,
                                                     remainingSeconds,
-                                                    clockMode,
-                                                    stopwatchElapsedSeconds
+                                                    PuzzleClockMode.COUNTDOWN,
+                                                    0,
+                                                    timerStarted
                                                 )
                                             }
                                         }
@@ -621,9 +676,9 @@ fun PicturePuzzleGameScreen(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .padding(bottom = 5.dp, start = 3.dp, end = 3.dp),
+                .padding(bottom = 8.dp, start = 6.dp, end = 6.dp),
             shape = RoundedCornerShape(28.dp),
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.88f),
+            color = Color(0xFFFFFBF4).copy(alpha = 0.98f),
             tonalElevation = 8.dp,
             shadowElevation = 8.dp
         ) {
@@ -641,12 +696,13 @@ fun PicturePuzzleGameScreen(
                             Text(
                                 "Picture progress",
                                 style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.SemiBold
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFF303B37)
                             )
                             Text(
                                 "$connectionCount of $totalConnections connections",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = Color(0xFF6C6B63)
                             )
                         }
                         OutlinedButton(
@@ -663,7 +719,7 @@ fun PicturePuzzleGameScreen(
                             .fillMaxWidth()
                             .height(7.dp)
                             .background(
-                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f),
+                                Color(0xFFE9E0D4),
                                 CircleShape
                             )
                     ) {
@@ -672,7 +728,7 @@ fun PicturePuzzleGameScreen(
                                 modifier = Modifier
                                     .fillMaxWidth(connectionProgress)
                                     .height(7.dp)
-                                    .background(MaterialTheme.colorScheme.primary, CircleShape)
+                                    .background(Color(0xFF4F9DA0), CircleShape)
                             )
                         }
                     }
@@ -732,60 +788,31 @@ fun PicturePuzzleGameScreen(
         }
     }
 
-    if (isPaused) {
+    if (timeExpired) {
         AlertDialog(
-            onDismissRequest = { if (!timeExpired) isPaused = false },
-            title = { Text(if (timeExpired) "Time’s up ⏱" else "Puzzle paused") },
+            onDismissRequest = { },
+            title = { Text("Time’s up ⏱") },
             text = {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    if (timeExpired) {
-                        Text("This countdown attempt has ended. Restart the puzzle to try again.")
-                        Spacer(Modifier.height(14.dp))
-                        Text(
-                            "00:00",
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.error
-                        )
-                    } else {
-                        Text("${if (clockMode == PuzzleClockMode.COUNTDOWN) "Countdown" else "Stopwatch"} is frozen while paused.")
-                        Spacer(Modifier.height(14.dp))
-                        Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer) {
-                            Text(
-                                formatChallengeTime(
-                                    if (clockMode == PuzzleClockMode.COUNTDOWN) remainingSeconds else stopwatchElapsedSeconds
-                                ),
-                                modifier = Modifier.padding(horizontal = 22.dp, vertical = 10.dp),
-                                style = MaterialTheme.typography.headlineSmall,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
+                    Text("This countdown attempt has ended. Restart the puzzle to try again.")
+                    Spacer(Modifier.height(14.dp))
+                    Text(
+                        "00:00",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.error
+                    )
                 }
             },
             confirmButton = {
-                if (timeExpired) {
-                    Button(onClick = {
-                        restart()
-                        isPaused = false
-                    }) { Text("Restart puzzle") }
-                } else {
-                    Button(onClick = { isPaused = false }) { Text("Resume") }
-                }
+                Button(onClick = { restart() }) { Text("Restart puzzle") }
             },
             dismissButton = {
-                Row {
-                    if (!timeExpired) {
-                        TextButton(onClick = {
-                            restart()
-                            isPaused = false
-                        }) { Text("Restart") }
-                    }
-                    TextButton(onClick = onHome) { Text("Home") }
-                }
+                TextButton(onClick = onHome) { Text("Home") }
             }
         )
-    }}
+    }
+}
 
 private fun recommendedParMoves(gridSize: Int, totalConnections: Int): Int =
     gridSize * gridSize + totalConnections / 2

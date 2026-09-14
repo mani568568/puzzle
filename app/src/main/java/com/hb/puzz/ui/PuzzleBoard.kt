@@ -32,6 +32,8 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.graphicsLayer
@@ -73,6 +75,9 @@ fun PuzzleBoard(
     val secondary = MaterialTheme.colorScheme.secondary
     val surface = MaterialTheme.colorScheme.surface
     val outline = MaterialTheme.colorScheme.outline
+    val gridBorder = Color(0xFFE0B879)
+    val tileDivider = Color(0xFFE9DCCB)
+    val dragAccent = Color(0xFF67C9D7)
     val density = LocalDensity.current
 
     var draggingAnchorTileId by remember { mutableStateOf<Int?>(null) }
@@ -99,8 +104,8 @@ fun PuzzleBoard(
             modifier = Modifier
                 .width(boardWidth)
                 .height(boardHeight)
-                .background(surface.copy(alpha = 0.96f), RoundedCornerShape(16.dp))
-                .border(2.dp, primary.copy(alpha = 0.56f), RoundedCornerShape(16.dp))
+                .background(Color(0xFFFFF7EA), RoundedCornerShape(10.dp))
+                .border(3.dp, gridBorder, RoundedCornerShape(10.dp))
         ) {
             // A single shared preview footprint keeps merged pieces looking like one object.
             val anchor = draggingAnchorTileId
@@ -118,7 +123,7 @@ fun PuzzleBoard(
                             val top = row * tileHeightPx
                             mask.addRect(Rect(left, top, left + tileWidthPx, top + tileHeightPx))
                         }
-                        drawPath(mask, secondary.copy(alpha = 0.10f))
+                        drawPath(mask, dragAccent.copy(alpha = 0.10f))
 
                         previewPositions.forEach { position ->
                             val row = position / gridSize
@@ -128,7 +133,7 @@ fun PuzzleBoard(
                             val right = left + tileWidthPx
                             val bottom = top + tileHeightPx
                             val stroke = 2.dp.toPx()
-                            val color = primary.copy(alpha = 0.68f)
+                            val color = dragAccent.copy(alpha = 0.88f)
 
                             if (row == 0 || position - gridSize !in previewPositions) {
                                 drawLine(color, Offset(left, top), Offset(right, top), stroke, StrokeCap.Round)
@@ -213,13 +218,13 @@ fun PuzzleBoard(
                                 scaleX = scale
                                 scaleY = scale
                                 shadowElevation = if (isDragging) 10.dp.toPx() else 0f
-                                shape = RoundedCornerShape(5.dp)
+                                shape = RectangleShape
                                 clip = true
                             }
                             .border(
-                                width = if (isDragging) 2.2.dp else 0.45.dp,
-                                color = if (isDragging) primary else outline.copy(alpha = 0.24f),
-                                shape = RoundedCornerShape(5.dp)
+                                width = if (isDragging) 2.0.dp else 0.8.dp,
+                                color = if (isDragging) dragAccent else tileDivider.copy(alpha = 0.88f),
+                                shape = RectangleShape
                             )
                             .pointerInput(tileId, position, tileWidthPx, tileHeightPx, boardVersion) {
                                 detectDragGestures(
@@ -377,14 +382,14 @@ fun PuzzleBoard(
                             else -> 1.7.dp.toPx()
                         }
                         val glowColor = when {
-                            isCelebrating -> secondary.copy(alpha = 0.48f)
-                            isDragging -> primary.copy(alpha = 0.30f)
-                            else -> secondary.copy(alpha = 0.20f)
+                            isCelebrating -> dragAccent.copy(alpha = 0.52f)
+                            isDragging -> dragAccent.copy(alpha = 0.34f)
+                            else -> gridBorder.copy(alpha = 0.18f)
                         }
                         val edgeColor = when {
-                            isCelebrating -> secondary
-                            isDragging -> primary
-                            else -> primary.copy(alpha = 0.88f)
+                            isCelebrating -> dragAccent
+                            isDragging -> dragAccent
+                            else -> gridBorder.copy(alpha = 0.96f)
                         }
 
                         occupiedPositions.forEach { boardPosition ->
