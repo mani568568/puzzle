@@ -7,18 +7,16 @@ import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.edit
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
-/**
- * Manages game settings using DataStore.
- */
+private val Context.picturePuzzleDataStore by preferencesDataStore(name = "cozy_blocks_settings")
+
+/** Persistence for picture-puzzle progress and user preferences. */
 class GameSettings(context: Context) {
-    
-    private val Context.dataStore by preferencesDataStore(name = "cozy_blocks_settings")
-    private val dataStore = context.dataStore
+    private val dataStore = context.applicationContext.picturePuzzleDataStore
 
     companion object {
-        // Settings keys
         private val KEY_COMPLETED_LEVELS = stringSetPreferencesKey("completed_levels")
         private val KEY_HIGHEST_LEVEL = intPreferencesKey("highest_level")
         private val KEY_SOUND_ENABLED = booleanPreferencesKey("sound_enabled")
@@ -26,77 +24,42 @@ class GameSettings(context: Context) {
         private val KEY_DARK_THEME = booleanPreferencesKey("dark_theme")
     }
 
-    // Settings flows
-    val completedLevelsFlow: Flow<Set<String>> = dataStore.data.map { prefs ->
-        prefs[KEY_COMPLETED_LEVELS] ?: emptySet()
-    }
+    val completedLevelsFlow: Flow<Set<String>> = dataStore.data.map { it[KEY_COMPLETED_LEVELS] ?: emptySet() }
+    val highestLevelFlow: Flow<Int> = dataStore.data.map { it[KEY_HIGHEST_LEVEL] ?: 1 }
+    val soundEnabledFlow: Flow<Boolean> = dataStore.data.map { it[KEY_SOUND_ENABLED] ?: true }
+    val hapticsEnabledFlow: Flow<Boolean> = dataStore.data.map { it[KEY_HAPTICS_ENABLED] ?: false }
+    val darkThemeFlow: Flow<Boolean> = dataStore.data.map { it[KEY_DARK_THEME] ?: false }
 
-    val highestLevelFlow: Flow<Int> = dataStore.data.map { prefs ->
-        prefs[KEY_HIGHEST_LEVEL] ?: 1
-    }
-
-    val soundEnabledFlow: Flow<Boolean> = dataStore.data.map { prefs ->
-        prefs[KEY_SOUND_ENABLED] ?: true
-    }
-
-    val hapticsEnabledFlow: Flow<Boolean> = dataStore.data.map { prefs ->
-        prefs[KEY_HAPTICS_ENABLED] ?: false
-    }
-
-    val darkThemeFlow: Flow<Boolean> = dataStore.data.map { prefs ->
-        prefs[KEY_DARK_THEME] ?: false
-    }
-
-    // Update methods
     suspend fun updateCompletedLevels(levels: Set<String>) {
-        dataStore.edit { prefs ->
-            prefs[KEY_COMPLETED_LEVELS] = levels
-        }
+        dataStore.edit { it[KEY_COMPLETED_LEVELS] = levels }
     }
 
     suspend fun addCompletedLevel(levelId: Int) {
-        val currentLevels = dataStore.data.map { it[KEY_COMPLETED_LEVELS] ?: emptySet() }.firstOrNull() ?: emptySet()
-        dataStore.edit { prefs ->
-            prefs[KEY_COMPLETED_LEVELS] = (currentLevels + levelId.toString()).toMutableSet()
-        }
-        
-        // Update highest level if needed
-        updateHighestLevel(levelId)
+        val current = dataStore.data.first()[KEY_COMPLETED_LEVELS] ?: emptySet()
+        dataStore.edit { it[KEY_COMPLETED_LEVELS] = current + levelId.toString() }
+        updateHighestLevel(levelId + 1)
     }
 
     suspend fun updateHighestLevel(newLevel: Int) {
-        val currentHighest = dataStore.data.map { it[KEY_HIGHEST_LEVEL] ?: 1 }.firstOrNull() ?: 1
-        if (newLevel > currentHighest) {
-            dataStore.edit { prefs ->
-                prefs[KEY_HIGHEST_LEVEL] = newLevel
-            }
+        val current = dataStore.data.first()[KEY_HIGHEST_LEVEL] ?: 1
+        if (newLevel > current) {
+            dataStore.edit { it[KEY_HIGHEST_LEVEL] = newLevel.coerceAtMost(20) }
         }
     }
 
     suspend fun updateSoundEnabled(enabled: Boolean) {
-        dataStore.edit { prefs ->
-            prefs[KEY_SOUND_ENABLED] = enabled
-        }
+        dataStore.edit { it[KEY_SOUND_ENABLED] = enabled }
     }
 
     suspend fun updateHapticsEnabled(enabled: Boolean) {
-        dataStore.edit { prefs ->
-            prefs[KEY_HAPTICS_ENABLED] = enabled
-        }
+        dataStore.edit { it[KEY_HAPTICS_ENABLED] = enabled }
     }
 
     suspend fun updateDarkTheme(enabled: Boolean) {
-        dataStore.edit { prefs ->
-            prefs[KEY_DARK_THEME] = enabled
-        }
+        dataStore.edit { it[KEY_DARK_THEME] = enabled }
     }
 
-    /**
-     * Resets all progress.
-     */
     suspend fun resetProgress() {
-        dataStore.edit { prefs ->
-            prefs.clear()
-        }
+        dataStore.edit { it.clear() }
     }
 }

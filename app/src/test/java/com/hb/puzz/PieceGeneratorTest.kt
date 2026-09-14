@@ -54,7 +54,7 @@ class PieceGeneratorTest {
     }
     
     @Test
-    fun `pieces_include_various_shapes()`() {
+    fun `pieces_include_various_shapes`() {
         val shapes = HashSet<String>()
         
         // Generate many pieces and check variety
@@ -77,7 +77,7 @@ class PieceGeneratorTest {
     }
     
     @Test
-    fun `piece_offset_preserves_shape()`() {
+    fun `piece_offset_preserves_shape`() {
         val originalPiece = generator.generatePiece(1)
         
         val offsetX = 5

@@ -20,10 +20,7 @@ class PuzzleEngineTest {
     fun `solved_state_detection`() {
         // Create engine with solved positions
         val engine = PuzzleEngine(2, 12345L)
-        for (i in 0 until 4) {
-            engine._tilePositions[i] = i
-        }
-        
+        assertTrue(engine.restorePositions(intArrayOf(0, 1, 2, 3)))
         assertTrue(engine.isSolved())
     }
     
@@ -82,10 +79,7 @@ class PuzzleEngineTest {
         val engine = PuzzleEngine(3, 12345L)
         
         // Set up a solved state
-        for (i in 0 until 9) {
-            engine._tilePositions[i] = i
-        }
-        
+        assertTrue(engine.restorePositions(IntArray(9) { it }))
         val groups = engine.getConnectedGroups()
         
         // Should have connected groups for adjacent tiles
@@ -98,14 +92,8 @@ class PuzzleEngineTest {
         
         // Set up state where tile 0 (should be at pos 0) is at position 3
         // This breaks horizontal connection across row boundary
-        for (i in 0 until 9) {
-            engine._tilePositions[i] = i
-        }
-        // Swap 0 and 3
-        val temp = engine._tilePositions[0]
-        engine._tilePositions[0] = engine._tilePositions[3]
-        engine._tilePositions[3] = temp
-        
+        assertTrue(engine.restorePositions(IntArray(9) { it }))
+        engine.attemptSwap(0, 3)
         val groups = engine.getConnectedGroups()
         
         // Row boundary should prevent false connections

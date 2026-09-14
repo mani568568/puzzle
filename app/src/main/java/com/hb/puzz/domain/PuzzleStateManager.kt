@@ -2,143 +2,83 @@ package com.hb.puzz.domain
 
 import kotlin.math.abs
 
-/**
- * Manages puzzle game state including engine, level info, and moves.
- */
+/** Saveable snapshot of a picture-puzzle session. */
+data class PuzzleGameState(
+    val levelId: Int,
+    val tilePositions: IntArray,
+    val moveCount: Int,
+    val isSolved: Boolean
+)
+
+/** Keeps level metadata, puzzle state and move count together. */
 class PuzzleStateManager(
     private val initialLevel: PuzzleLevel,
-    initialPositions: IntArray? = null
+    initialPositions: IntArray? = null,
+    initialMoveCount: Int = 0
 ) {
-    private var _engine = PuzzleEngine(initialLevel.gridSize, initialLevel.seed)
-    
+    private var engine = PuzzleEngine(initialLevel.gridSize, initialLevel.seed)
+    var moveCount: Int = initialMoveCount
+        private set
+
     init {
-        if (initialPositions != null && initialPositions.size == _engine.totalTiles) {
-            // Validate and set provided positions
-            val permCheck = BooleanArray(_engine.totalTiles) { false }
-            var valid = true
-            for (pos in initialPositions) {
-                if (pos !in 0 until _engine.totalTiles || permCheck[pos]) {
-                    valid = false
-                    break
-                }
-                permCheck[pos] = true
-            }
-            
-            if (valid) {
-                _engine._tilePositions = initialPositions.clone()
-            }
-        }
+        initialPositions?.let { engine.restorePositions(it) }
     }
-    
-    /**
-     * Gets the current grid size.
-     */
-    val gridSize: Int get() = _engine.gridSize
-    
-    /**
-     * Gets the puzzle engine instance.
-     */
-    fun getEngine(): PuzzleEngine = _engine
-    
-    /**
-     * Swaps two tiles and returns true if successful.
-     */
+
+    val gridSize: Int get() = engine.gridSize
+
+    fun getEngine(): PuzzleEngine = engine
+
     fun attemptSwap(positionA: Int, positionB: Int): Boolean {
-        val swapped = _engine.attemptSwap(positionA, positionB)
-        
-        // Check if solved after swap
+        val swapped = engine.attemptSwap(positionA, positionB)
+        if (swapped) moveCount++
         return swapped
     }
-    
-    /**
-     * Checks if the puzzle is currently solved.
-     */
-    fun isSolved(): Boolean = _engine.isSolved()
-    
-    /**
-     * Shuffles all tiles (for restart).
-     */
+
+    fun isSolved(): Boolean = engine.isSolved()
+
     fun shuffle() {
-        _engine.shuffle()
+        engine.shuffle()
+        moveCount = 0
     }
-    
-    /**
-     * Gets connected groups of correctly adjacent tiles for visual merging.
-     */
-    fun getConnectedGroups(): List<List<Int>> = _engine.getConnectedGroups()
-    
-    /**
-     * Creates a saveable state snapshot.
-     */
-    fun createGameState(): PuzzleGameState {
-        return PuzzleGameState(
-            level = initialLevel,
-            tilePositions = _engine.getCurrentPositions(),
-            moveCount = 0,  // Would be tracked separately
-            isSolved = isSolved()
-        )
-    }
-    
-    /**
-     * Restores state from a saved game.
-     */
-    fun restoreFromState(state: PuzzleGameState) {
-        if (state.tilePositions.size == _engine.totalTiles) {
-            _engine._tilePositions = state.tilePositions.clone()
-        }
+
+    fun getConnectedGroups(): List<List<Int>> = engine.getConnectedGroups()
+
+    fun createGameState(): PuzzleGameState = PuzzleGameState(
+        levelId = initialLevel.id,
+        tilePositions = engine.getCurrentPositions(),
+        moveCount = moveCount,
+        isSolved = isSolved()
+    )
+
+    fun restoreFromState(state: PuzzleGameState): Boolean {
+        if (state.levelId != initialLevel.id) return false
+        if (!engine.restorePositions(state.tilePositions)) return false
+        moveCount = state.moveCount.coerceAtLeast(0)
+        return true
     }
 }
 
-/**
- * Utility functions for puzzle operations.
- */
 object PuzzleUtils {
-    
-    /**
-     * Gets the row and column from a linear position in a grid.
-     */
-    fun getPositionCoords(position: Int, gridSize: Int): Pair<Int, Int> {
-        val row = position / gridSize
-        val col = position % gridSize
-        return row to col
-    }
-    
-    /**
-     * Converts row/column to linear position.
-     */
-    fun getLinearPosition(row: Int, col: Int, gridSize: Int): Int {
-        return row * gridSize + col
-    }
-    
-    /**
-     * Checks if two positions are adjacent (horizontally or vertically).
-     */
+    fun getPositionCoords(position: Int, gridSize: Int): Pair<Int, Int> =
+        position / gridSize to position % gridSize
+
+    fun getLinearPosition(row: Int, col: Int, gridSize: Int): Int = row * gridSize + col
+
     fun areAdjacent(posA: Int, posB: Int, gridSize: Int): Boolean {
         val (rowA, colA) = getPositionCoords(posA, gridSize)
         val (rowB, colB) = getPositionCoords(posB, gridSize)
-        
-        return when {
-            rowA == rowB && abs(colA - colB) == 1 -> true
-            colA == colB && abs(rowA - rowB) == 1 -> true
-            else -> false
-        }
+        return (rowA == rowB && abs(colA - colB) == 1) ||
+            (colA == colB && abs(rowA - rowB) == 1)
     }
-    
-    /**
-     * Validates a tile permutation is valid (all IDs present exactly once).
-     */
+
     fun isValidPermutation(positions: IntArray, gridSize: Int): Boolean {
         val totalTiles = gridSize * gridSize
         if (positions.size != totalTiles) return false
-        
-        val seen = BooleanArray(totalTiles) { false }
-        for (pos in positions) {
-            if (pos !in 0 until totalTiles || seen[pos]) {
-                return false
-            }
-            seen[pos] = true
+        val seen = BooleanArray(totalTiles)
+        for (tile in positions) {
+            if (tile !in 0 until totalTiles || seen[tile]) return false
+            seen[tile] = true
         }
-        
-        return seen.all { it }
+        return true
     }
 }

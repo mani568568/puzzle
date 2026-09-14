@@ -174,37 +174,19 @@ fun HowToPlayScreen(modifier: Modifier = Modifier) {
             color = MaterialTheme.colorScheme.primary,
             modifier = Modifier.padding(bottom = 24.dp)
         )
-        
+
         Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-            Text(
-                text = "1. Place Pieces",
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
-            )
-            Text("Drag a piece from the tray onto the board, or tap a piece then tap its top-left placement cell.")
-            
-            Text(
-                text = "2. Complete Lines",
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                modifier = Modifier.padding(top = 24.dp, bottom = 8.dp)
-            )
-            Text("Fill entire rows or columns to clear them and score points.")
-            
-            Text(
-                text = "3. Scoring",
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                modifier = Modifier.padding(top = 24.dp, bottom = 8.dp)
-            )
-            Text("• 1 point per placed cell")
-            Text("• 10 points per completed line")
-            Text("• Bonus: 5 × L × (L-1) for clearing L lines at once")
-            
-            Text(
-                text = "4. Game Over",
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                modifier = Modifier.padding(top = 24.dp, bottom = 8.dp)
-            )
-            Text("When no pieces can be placed, the game ends.")
+            Text("1. Choose a tile", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
+            Text("Tap any picture tile to select it.")
+
+            Text("2. Swap two tiles", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold), modifier = Modifier.padding(top = 24.dp))
+            Text("Tap a second tile to swap their positions.")
+
+            Text("3. Restore the artwork", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold), modifier = Modifier.padding(top = 24.dp))
+            Text("Keep swapping until every tile is back in its original picture position.")
+
+            Text("4. Progress through levels", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold), modifier = Modifier.padding(top = 24.dp))
+            Text("Later levels use larger 4×4 and 5×5 grids for a harder challenge.")
         }
     }
 }
