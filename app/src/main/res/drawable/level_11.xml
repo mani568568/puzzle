@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="200dp"
+    android:height="200dp"
+    android:viewportWidth="200"
+    android:viewportHeight="200">
+
+    <!-- Heart pattern -->
+    <path
+        android:pathData="M100,150 C70,180 30,140 30,90 C30,60 60,40 100,60 C140,40 170,60 170,90 C170,140 130,180 100,150 Z"
+        android:fillColor="#FFB7A3" />
+
+</vector>

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="200dp"
+    android:height="200dp"
+    android:viewportWidth="200"
+    android:viewportHeight="200">
+
+    <!-- Sun pattern -->
+    <path
+        android:pathData="M100,100 L130,80 L150,100 L130,120 Z"
+        android:fillColor="#FFB7A3" />
+
+    <path
+        android:pathData="M100,40 L100,60 M100,140 L100,160 M40,100 L60,100 M140,100 L160,100"
+        android:strokeColor="#B5C5B2"
+        android:strokeWidth="10" />
+
+</vector>

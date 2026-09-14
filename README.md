@@ -1,41 +1,49 @@
-# Mosaic Blocks - Offline Block Puzzle Game
+# Cozy Picture Blocks
 
-A polished, relaxing block puzzle game built with Kotlin and Jetpack Compose.
+A relaxing picture puzzle game where players rearrange shuffled rectangular picture tiles to reconstruct an illustration.
 
 ## Features
 
-- **Offline Play**: Works without internet connection
+- **Offline Play**: Works without internet connection from first launch
 - **Clean Architecture**: Separated game logic from UI code
 - **Modern UI**: Jetpack Compose with Material Design 3
-- **Persistence**: Settings and game state saved with DataStore
-- **Responsive**: Adapts to different phone sizes
+- **Persistence**: DataStore for settings and best scores
+- **Multiple Difficulty Levels**: 3×3, 4×4, and 5×5 grids (20 levels)
+- **Visual Merging**: Correctly adjacent tiles visually merge
+
+## Game Rules
+
+1. Puzzle divided into N×N grid (3×3, 4×4, or 5×5)
+2. Each tile has a permanent ID representing its correct position
+3. Initially shuffle all tiles among grid cells
+4. All cells remain occupied; no empty sliding-puzzle cell
+5. Drag any single tile onto any other cell to swap
+6. Dropping outside board returns tile to original position
+7. Dropping onto own cell makes no move
+8. Tiles in correct positions are still movable
+9. Count completed swaps as moves only
+10. Puzzle solved when every tile is in its correct cell
+
+## Scoring
+
+- Move counter tracks puzzle attempts
+- No time limit or lives system
+- Solved state displayed with move count
 
 ## Architecture
 
 ```
-MosaicBlocks/
+app/
 ├── domain/              # Game logic & rules
-│   ├── model/          # Piece, Cell, Board, GameState
-│   └── GameEngine.kt   # Core game mechanics
-├── data/               # Data persistence
-│   └── GameDatastore.kt
-└── ui/                 # UI components
-    ├── theme/          # Colors and themes
-    ├── components/     # Reusable UI elements
-    └── screens/        # Main screens
+│   ├── model/          # Data classes (PuzzleLevel, PuzzleGameState)
+│   └── PuzzleEngine.kt    # Core puzzle mechanics
+├── ui/                 # UI components
+│   ├── theme/          # Colors and themes
+│   ├── screens/        # Main screens
+│   └── components/     # Reusable UI elements
+├── data/               # Data persistence (DataStore, Room)
+└── MainActivity.kt     # Entry point
 ```
-
-## Game Rules
-
-1. **Board**: 8×8 grid
-2. **Pieces**: 3 random pieces at a time (lines, squares, L/T shapes)
-3. **Placement**: Drag to empty cells, must fit within bounds
-4. **Clearing**: Full rows/columns clear simultaneously
-5. **Scoring**: 
-   - 1 point per placed cell
-   - 10 points per cleared line
-   - Bonus: 5×L×(L-1) for clearing L lines at once
-6. **Game Over**: No valid moves remaining
 
 ## Building the Project
 
@@ -46,67 +54,49 @@ MosaicBlocks/
 
 ### Steps
 ```bash
-# Sync dependencies
-./gradlew sync
+# Open project in Android Studio
+# Sync dependencies (File > Sync Project with Gradle Files)
 
 # Build project
 ./gradlew build
 
-# Run tests
-./gradlew test
-
-# Generate APK for testing
-./gradlew assembleDebug
-
-# Generate release AAB
-./gradlew bundleRelease
-```
-
-## Running Tests
-
-```bash
-# Unit tests
+# Run unit tests
 ./gradlew testDebugUnitTest
 
-# Instrumentation tests (requires device/emulator)
-./gradlew connectedAndroidTest
+# Generate debug APK
+./gradlew assembleDebug
+```
+
+## Testing
+
+Run unit tests with:
+```bash
+./gradlew testDebugUnitTest --tests "com.hb.puzz.PuzzleEngineTest"
 ```
 
 ## Key Files
 
-- **Game Engine**: [domain/GameEngine.kt](app/src/main/java/com/hb/puzz/domain/GameEngine.kt)
-- **Data Model**: [domain/model/Piece.kt](app/src/main/java/com/hb/puzz/domain/model/Piece.kt)
-- **Persistence**: [data/GameDatastore.kt](app/src/main/java/com/hb/puzz/data/GameDatastore.kt)
-- **Tests**: 
-  - [test/GameEngineTest.kt](app/src/test/java/com/hb/puzz/GameEngineTest.kt)
-  - [test/GameBoardTest.kt](app/src/test/java/com/hb/puzz/GameBoardTest.kt)
-
-## Scoring Examples
-
-| Scenario | Calculation | Score |
-|----------|-------------|-------|
-| Place 4 cells, clear 1 line | 4 + (1×10) + 0 | 14 |
-| Place 6 cells, clear 2 lines | 6 + (2×10) + 10 | 36 |
-| Place 8 cells, clear 5 lines | 8 + (5×10) + 100 | 158 |
-
-## Controls
-
-- **Tap/Click**: Place piece at grid position
-- **Drag**: Move piece and preview placement
-- **Pause**: Temporary game pause with resume option
-- **Restart**: Start new game from current screen
+- **Puzzle Engine**: `domain/PuzzleEngine.kt`
+- **Level Data**: `domain/PuzzleLevel.kt`
+- **Game State**: `ui/GameActivity.kt`
 
 ## Theme Colors
 
 | Color | Hex |
 |-------|-----|
-| Background | #FAF7ED (Ivory) |
-| Primary Text | #1A2B4C (Navy) |
-| Block Coral | #FFB39A |
-| Block Teal | #7DE3E8 |
-| Block Blue | #9BC5F2 |
-| Block Gold | #FFD166 |
+| Background | #F5F1E8 (Cozy Cream) |
+| Primary Text | #2D5F6D (Deep Teal) |
+| Accent | #FFB7A3 (Peach) |
+
+## Next Steps
+
+1. Implement full drag-to-swap UI
+2. Add visual merging animations for connected tiles
+3. Implement level gallery screen
+4. Add completion celebration animation
+5. Implement persistence with DataStore/Room
+6. Add sound effects and haptics
 
 ## License
 
-MIT License - free to use and modify for personal and commercial projects.
+MIT License - free to use and modify.

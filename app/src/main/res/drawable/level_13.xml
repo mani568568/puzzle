@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="200dp"
+    android:height="200dp"
+    android:viewportWidth="200"
+    android:viewportHeight="200">
+
+    <!-- Triangle pattern -->
+    <path
+        android:pathData="M100,30 L170,150 L30,150 Z"
+        android:fillColor="#B5C5B2" />
+
+    <path
+        android:pathData="M100,30 L140,90 L60,90 Z"
+        android:fillColor="#FFB7A3" />
+
+</vector>

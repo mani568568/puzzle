@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="200dp"
+    android:height="200dp"
+    android:viewportWidth="200"
+    android:viewportHeight="200">
+
+    <!-- Striped pattern -->
+    <path
+        android:pathData="M0,0 L200,0 L200,67 L0,67 Z"
+        android:fillColor="#FFB7A3" />
+
+    <path
+        android:pathData="M0,67 L200,67 L200,133 L0,133 Z"
+        android:fillColor="#4A90A4" />
+
+    <path
+        android:pathData="M0,133 L200,133 L200,200 L0,200 Z"
+        android:fillColor="#B5C5B2" />
+
+</vector>

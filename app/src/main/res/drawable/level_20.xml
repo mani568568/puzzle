@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="200dp"
+    android:height="200dp"
+    android:viewportWidth="200"
+    android:viewportHeight="200">
+
+    <!-- Flower pattern -->
+    <path
+        android:pathData="M100,100 A40,40 0 1,1 180,100 A40,40 0 1,1 100,100 M100,60 L100,140"
+        android:fillColor="#FFB7A3"
+        android:strokeColor="#B5C5B2"
+        android:strokeWidth="5" />
+
+</vector>

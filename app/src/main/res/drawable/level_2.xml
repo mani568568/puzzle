@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="200dp"
+    android:height="200dp"
+    android:viewportWidth="200"
+    android:viewportHeight="200">
+
+    <!-- Checkerboard pattern -->
+    <path
+        android:pathData="M0,0 L50,0 L50,50 L0,50 Z"
+        android:fillColor="#FFB7A3" />
+
+    <path
+        android:pathData="M50,0 L100,0 L100,50 L50,50 Z"
+        android:fillColor="#4A90A4" />
+
+    <path
+        android:pathData="M100,0 L150,0 L150,50 L100,50 Z"
+        android:fillColor="#FFB7A3" />
+
+    <path
+        android:pathData="M150,0 L200,0 L200,50 L150,50 Z"
+        android:fillColor="#4A90A4" />
+
+    <path
+        android:pathData="M0,50 L50,50 L50,100 L0,100 Z"
+        android:fillColor="#B5C5B2" />
+
+    <path
+        android:pathData="M50,50 L100,50 L100,100 L50,100 Z"
+        android:fillColor="#FFB7A3" />
+
+    <path
+        android:pathData="M100,50 L150,50 L150,100 L100,100 Z"
+        android:fillColor="#4A90A4" />
+
+    <path
+        android:pathData="M150,50 L200,50 L200,100 L150,100 Z"
+        android:fillColor="#B5C5B2" />
+
+    <!-- Row 3 -->
+    <path
+        android:pathData="M0,100 L50,100 L50,150 L0,150 Z"
+        android:fillColor="#FFB7A3" />
+
+    <path
+        android:pathData="M50,100 L100,100 L100,150 L50,150 Z"
+        android:fillColor="#4A90A4" />
+
+    <path
+        android:pathData="M100,100 L150,100 L150,150 L100,150 Z"
+        android:fillColor="#B5C5B2" />
+
+    <path
+        android:pathData="M150,100 L200,100 L200,150 L150,150 Z"
+        android:fillColor="#FFB7A3" />
+
+    <path
+        android:pathData="M0,150 L50,150 L50,200 L0,200 Z"
+        android:fillColor="#4A90A4" />
+
+    <path
+        android:pathData="M50,150 L100,150 L100,200 L50,200 Z"
+        android:fillColor="#FFB7A3" />
+
+    <path
+        android:pathData="M100,150 L150,150 L150,200 L100,200 Z"
+        android:fillColor="#4A90A4" />
+
+    <path
+        android:pathData="M150,150 L200,150 L200,200 L150,200 Z"
+        android:fillColor="#B5C5B2" />
+
+</vector>
