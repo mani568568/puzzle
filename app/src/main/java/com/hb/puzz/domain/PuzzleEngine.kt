@@ -2,6 +2,12 @@ package com.hb.puzz.domain
 
 import kotlin.random.Random
 
+/** A correct relationship between two neighboring source-image tiles. */
+data class TileConnection(
+    val firstTileId: Int,
+    val secondTileId: Int
+)
+
 /** Pure puzzle model. Tile IDs represent their solved positions. */
 class PuzzleEngine(
     val gridSize: Int,
@@ -31,7 +37,15 @@ class PuzzleEngine(
 
     fun isSolved(): Boolean = positions.indices.all { positions[it] == it }
 
+    /**
+     * Shuffles until the puzzle is unsolved and, when practical, avoids starting with
+     * too many already-connected neighbors. This keeps the opening state feeling random
+     * and gives the player more satisfying connections to discover.
+     */
     fun shuffle() {
+        val maxStartingConnections = (getTotalPossibleConnections() / 6).coerceAtLeast(1)
+        var attempts = 0
+
         do {
             for (i in totalTiles - 1 downTo 1) {
                 val j = random.nextInt(i + 1)
@@ -39,7 +53,18 @@ class PuzzleEngine(
                 positions[i] = positions[j]
                 positions[j] = temp
             }
-        } while (isSolved() && totalTiles > 1)
+            attempts++
+        } while (
+            attempts < 24 &&
+            (isSolved() || getCorrectConnections().size > maxStartingConnections)
+        )
+
+        // Extremely defensive: a tiny board could theoretically still land solved.
+        if (isSolved() && totalTiles > 1) {
+            val temp = positions[0]
+            positions[0] = positions[1]
+            positions[1] = temp
+        }
     }
 
     fun getTileAt(position: Int): Int =
@@ -65,39 +90,61 @@ class PuzzleEngine(
         return true
     }
 
-    /**
-     * Returns groups of tiles that are currently touching the same neighbors
-     * they have in the solved picture. Useful for optional merge/highlight UI.
-     */
-    fun getConnectedGroups(): List<List<Int>> {
-        val adjacency = Array(totalTiles) { mutableSetOf<Int>() }
+    /** Number of neighbor relationships present in a completely solved grid. */
+    fun getTotalPossibleConnections(): Int = 2 * gridSize * (gridSize - 1)
 
-        fun connectPositions(posA: Int, posB: Int) {
+    /**
+     * Returns every pair of tiles currently touching in the same orientation they have
+     * in the original image. A pair can therefore be correctly connected even while the
+     * whole group is temporarily located elsewhere on the board.
+     */
+    fun getCorrectConnections(): Set<TileConnection> {
+        val connections = linkedSetOf<TileConnection>()
+
+        fun inspect(posA: Int, posB: Int) {
             val tileA = positions[posA]
             val tileB = positions[posB]
+
             val tileARow = tileA / gridSize
             val tileACol = tileA % gridSize
             val tileBRow = tileB / gridSize
             val tileBCol = tileB % gridSize
+
             val posARow = posA / gridSize
             val posACol = posA % gridSize
             val posBRow = posB / gridSize
             val posBCol = posB % gridSize
 
-            if (tileBRow - tileARow == posBRow - posARow &&
+            if (
+                tileBRow - tileARow == posBRow - posARow &&
                 tileBCol - tileACol == posBCol - posACol
             ) {
-                adjacency[tileA].add(tileB)
-                adjacency[tileB].add(tileA)
+                connections += TileConnection(
+                    firstTileId = minOf(tileA, tileB),
+                    secondTileId = maxOf(tileA, tileB)
+                )
             }
         }
 
         for (row in 0 until gridSize) {
             for (col in 0 until gridSize) {
                 val pos = row * gridSize + col
-                if (col + 1 < gridSize) connectPositions(pos, pos + 1)
-                if (row + 1 < gridSize) connectPositions(pos, pos + gridSize)
+                if (col + 1 < gridSize) inspect(pos, pos + 1)
+                if (row + 1 < gridSize) inspect(pos, pos + gridSize)
             }
+        }
+
+        return connections
+    }
+
+    /**
+     * Returns groups of two or more tiles joined by correct neighbor relationships.
+     */
+    fun getConnectedGroups(): List<List<Int>> {
+        val adjacency = Array(totalTiles) { mutableSetOf<Int>() }
+        getCorrectConnections().forEach { connection ->
+            adjacency[connection.firstTileId].add(connection.secondTileId)
+            adjacency[connection.secondTileId].add(connection.firstTileId)
         }
 
         val visited = BooleanArray(totalTiles)
@@ -118,7 +165,7 @@ class PuzzleEngine(
                     }
                 }
             }
-            if (group.size > 1) groups.add(group)
+            if (group.size > 1) groups.add(group.sorted())
         }
         return groups
     }

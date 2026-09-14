@@ -135,4 +135,20 @@ class PuzzleEngineTest {
             assertEquals(i, pos)  // Should match where we found it
         }
     }
+    @Test
+    fun `correct_connections_detect_relative_neighbors`() {
+        val engine = PuzzleEngine(3, 12345L)
+        // Tiles 0,1,3,4 form a correct 2x2 block in the upper-left.
+        assertTrue(engine.restorePositions(intArrayOf(0, 1, 5, 3, 4, 2, 8, 7, 6)))
+        val connections = engine.getCorrectConnections()
+        assertTrue(connections.any { it.firstTileId == 0 && it.secondTileId == 1 })
+        assertTrue(connections.any { it.firstTileId == 0 && it.secondTileId == 3 })
+    }
+
+    @Test
+    fun `total_possible_connections_for_3x3_is_12`() {
+        val engine = PuzzleEngine(3, 12345L)
+        assertEquals(12, engine.getTotalPossibleConnections())
+    }
+
 }
