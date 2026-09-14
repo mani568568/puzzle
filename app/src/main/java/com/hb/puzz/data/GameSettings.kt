@@ -7,6 +7,8 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.hb.puzz.data.images.ImageSourceMode
+import com.hb.puzz.data.images.PexelsPhotoMeta
 import com.hb.puzz.domain.PuzzleLevel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -31,6 +33,7 @@ class GameSettings(context: Context) {
         private val KEY_SOUND_ENABLED = booleanPreferencesKey("sound_enabled")
         private val KEY_HAPTICS_ENABLED = booleanPreferencesKey("haptics_enabled")
         private val KEY_DARK_THEME = booleanPreferencesKey("dark_theme")
+        private val KEY_IMAGE_SOURCE = stringPreferencesKey("image_source")
 
         private val KEY_SAVED_LEVEL = intPreferencesKey("saved_level")
         private val KEY_SAVED_POSITIONS = stringPreferencesKey("saved_positions")
@@ -57,6 +60,9 @@ class GameSettings(context: Context) {
     val soundEnabledFlow: Flow<Boolean> = dataStore.data.map { it[KEY_SOUND_ENABLED] ?: true }
     val hapticsEnabledFlow: Flow<Boolean> = dataStore.data.map { it[KEY_HAPTICS_ENABLED] ?: true }
     val darkThemeFlow: Flow<Boolean> = dataStore.data.map { it[KEY_DARK_THEME] ?: false }
+    val imageSourceFlow: Flow<ImageSourceMode> = dataStore.data.map { prefs ->
+        ImageSourceMode.fromStored(prefs[KEY_IMAGE_SOURCE])
+    }
 
     val savedSessionFlow: Flow<PuzzleSession?> = dataStore.data.map { prefs ->
         decodeSession(
@@ -131,6 +137,40 @@ class GameSettings(context: Context) {
 
     suspend fun updateDarkTheme(enabled: Boolean) {
         dataStore.edit { it[KEY_DARK_THEME] = enabled }
+    }
+
+    suspend fun updateImageSource(mode: ImageSourceMode) {
+        dataStore.edit { it[KEY_IMAGE_SOURCE] = mode.storedValue }
+    }
+
+    suspend fun loadPexelsPhoto(levelId: Int): PexelsPhotoMeta? {
+        val prefs = dataStore.data.first()
+        val id = prefs[stringPreferencesKey("pexels_${levelId}_id")]?.toLongOrNull() ?: return null
+        val imageUrl = prefs[stringPreferencesKey("pexels_${levelId}_image_url")] ?: return null
+        val photoUrl = prefs[stringPreferencesKey("pexels_${levelId}_photo_url")] ?: return null
+        val photographer = prefs[stringPreferencesKey("pexels_${levelId}_photographer")] ?: "Pexels photographer"
+        val photographerUrl = prefs[stringPreferencesKey("pexels_${levelId}_photographer_url")] ?: ""
+        return PexelsPhotoMeta(id, imageUrl, photoUrl, photographer, photographerUrl)
+    }
+
+    suspend fun savePexelsPhoto(levelId: Int, photo: PexelsPhotoMeta) {
+        dataStore.edit { prefs ->
+            prefs[stringPreferencesKey("pexels_${levelId}_id")] = photo.id.toString()
+            prefs[stringPreferencesKey("pexels_${levelId}_image_url")] = photo.imageUrl
+            prefs[stringPreferencesKey("pexels_${levelId}_photo_url")] = photo.photoUrl
+            prefs[stringPreferencesKey("pexels_${levelId}_photographer")] = photo.photographer
+            prefs[stringPreferencesKey("pexels_${levelId}_photographer_url")] = photo.photographerUrl
+        }
+    }
+
+    suspend fun clearPexelsPhoto(levelId: Int) {
+        dataStore.edit { prefs ->
+            prefs.remove(stringPreferencesKey("pexels_${levelId}_id"))
+            prefs.remove(stringPreferencesKey("pexels_${levelId}_image_url"))
+            prefs.remove(stringPreferencesKey("pexels_${levelId}_photo_url"))
+            prefs.remove(stringPreferencesKey("pexels_${levelId}_photographer"))
+            prefs.remove(stringPreferencesKey("pexels_${levelId}_photographer_url"))
+        }
     }
 
     /** Clears game progress and saved puzzle only; user preference toggles are preserved. */

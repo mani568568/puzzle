@@ -13,8 +13,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
@@ -24,6 +26,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -36,6 +39,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.hb.puzz.data.images.ImageSourceMode
 import com.hb.puzz.domain.PuzzleLevel
 
 @Composable
@@ -61,7 +65,7 @@ fun HomeScreen(
             color = MaterialTheme.colorScheme.primary
         )
         Spacer(Modifier.height(12.dp))
-        Text("Restore each picture by swapping its tiles.", style = MaterialTheme.typography.bodyLarge)
+        Text("Drag picture blocks into place to restore the artwork.", style = MaterialTheme.typography.bodyLarge)
         Spacer(Modifier.height(40.dp))
 
         if (hasSavedGame) {
@@ -142,10 +146,13 @@ fun SettingsScreen(
     soundEnabled: Boolean,
     hapticsEnabled: Boolean,
     darkThemeEnabled: Boolean,
+    imageSource: ImageSourceMode,
+    pexelsConfigured: Boolean,
     onBack: () -> Unit,
     onSoundChanged: (Boolean) -> Unit,
     onHapticsChanged: (Boolean) -> Unit,
     onDarkThemeChanged: (Boolean) -> Unit,
+    onImageSourceChanged: (ImageSourceMode) -> Unit,
     onResetProgress: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -158,7 +165,33 @@ fun SettingsScreen(
         SettingRow("Sound", soundEnabled, onSoundChanged)
         SettingRow("Haptics", hapticsEnabled, onHapticsChanged)
         SettingRow("Dark Theme", darkThemeEnabled, onDarkThemeChanged)
-        Spacer(Modifier.height(32.dp))
+
+        Spacer(Modifier.height(24.dp))
+        Text("Puzzle Images", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "Choose live Pexels photos or the artwork bundled with the app.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(Modifier.height(8.dp))
+
+        ImageSourceRow(
+            title = "Pexels photos",
+            subtitle = if (pexelsConfigured) "Online photos are cached per level" else "API key not configured — offline artwork will be used as fallback",
+            selected = imageSource == ImageSourceMode.PEXELS,
+            icon = { Icon(Icons.Default.Cloud, contentDescription = null) },
+            onClick = { onImageSourceChanged(ImageSourceMode.PEXELS) }
+        )
+        ImageSourceRow(
+            title = "Preloaded artwork",
+            subtitle = "Works fully offline and uses no network data",
+            selected = imageSource == ImageSourceMode.PRELOADED,
+            icon = { Icon(Icons.Default.Image, contentDescription = null) },
+            onClick = { onImageSourceChanged(ImageSourceMode.PRELOADED) }
+        )
+
+        Spacer(Modifier.height(28.dp))
         OutlinedButton(onClick = { confirmReset = true }, modifier = Modifier.fillMaxWidth()) {
             Text("Reset Game Progress")
         }
@@ -168,7 +201,7 @@ fun SettingsScreen(
         AlertDialog(
             onDismissRequest = { confirmReset = false },
             title = { Text("Reset progress?") },
-            text = { Text("Completed levels and the saved puzzle will be cleared. Your settings will stay unchanged.") },
+            text = { Text("Completed levels and the saved puzzle will be cleared. Your settings and cached Pexels photos will stay unchanged.") },
             confirmButton = {
                 TextButton(onClick = {
                     confirmReset = false
@@ -177,6 +210,29 @@ fun SettingsScreen(
             },
             dismissButton = { TextButton(onClick = { confirmReset = false }) { Text("Cancel") } }
         )
+    }
+}
+
+@Composable
+private fun ImageSourceRow(
+    title: String,
+    subtitle: String,
+    selected: Boolean,
+    icon: @Composable () -> Unit,
+    onClick: () -> Unit
+) {
+    Card(onClick = onClick, modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            icon()
+            Column(modifier = Modifier.fillMaxWidth(0.78f).padding(horizontal = 12.dp)) {
+                Text(title, fontWeight = FontWeight.Medium)
+                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            RadioButton(selected = selected, onClick = onClick)
+        }
     }
 }
 
@@ -198,13 +254,15 @@ fun HowToPlayScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
         modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(16.dp)
     ) {
         ScreenHeader(title = "How to Play", onBack = onBack)
-        Text("1. Tap one picture tile to select it.", style = MaterialTheme.typography.bodyLarge)
+        Text("1. Press and drag any picture block.", style = MaterialTheme.typography.bodyLarge)
         Spacer(Modifier.height(16.dp))
-        Text("2. Tap a second tile to swap the two positions.", style = MaterialTheme.typography.bodyLarge)
+        Text("2. Drop it over another block to swap their positions.", style = MaterialTheme.typography.bodyLarge)
         Spacer(Modifier.height(16.dp))
-        Text("3. Keep swapping until the full artwork is restored.", style = MaterialTheme.typography.bodyLarge)
+        Text("3. Blocks glide into their new positions. Keep rearranging until the full image is restored.", style = MaterialTheme.typography.bodyLarge)
         Spacer(Modifier.height(16.dp))
-        Text("4. Completing a level unlocks the next one. Later levels use larger 4×4 and 5×5 grids.", style = MaterialTheme.typography.bodyLarge)
+        Text("4. You can choose Pexels photos or bundled offline artwork in Settings.", style = MaterialTheme.typography.bodyLarge)
+        Spacer(Modifier.height(16.dp))
+        Text("5. Completing a level unlocks the next one. Later levels use larger 4×4 and 5×5 grids.", style = MaterialTheme.typography.bodyLarge)
     }
 }
 
@@ -214,7 +272,7 @@ private fun ScreenHeader(title: String, onBack: () -> Unit) {
         modifier = Modifier.fillMaxWidth().height(56.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = "Back") }
+        IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
         Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
     }
     Spacer(Modifier.height(16.dp))

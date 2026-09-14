@@ -1,7 +1,22 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.compose.compiler)
 }
+
+val localProperties = Properties().apply {
+    val file = rootProject.file("local.properties")
+    if (file.exists()) {
+        file.inputStream().use { load(it) }
+    }
+}
+
+val pexelsApiKey = (
+    localProperties.getProperty("PEXELS_API_KEY")
+        ?: providers.gradleProperty("PEXELS_API_KEY").orNull
+        ?: ""
+).replace("\\", "\\\\").replace("\"", "\\\"")
 
 android {
     namespace = "com.hb.puzz"
@@ -15,6 +30,7 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField("String", "PEXELS_API_KEY", "\"$pexelsApiKey\"")
     }
 
     buildTypes {
@@ -31,12 +47,11 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
 dependencies {
-    // Explicit Material dependency keeps the XML Material3 theme available even
-    // when this app module is copied independently of a version catalog.
     implementation("com.google.android.material:material:1.14.0")
 
     implementation(libs.androidx.core.ktx)

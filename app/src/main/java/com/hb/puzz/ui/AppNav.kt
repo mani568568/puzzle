@@ -3,13 +3,16 @@ package com.hb.puzz.ui
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.hb.puzz.data.GameSettings
+import com.hb.puzz.data.images.PuzzleImageRepository
 import com.hb.puzz.domain.PuzzleLevel
 import kotlinx.coroutines.launch
 
@@ -27,6 +30,8 @@ private object Routes {
 fun CozyBlocksApp(settings: GameSettings) {
     val navController = rememberNavController()
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val imageRepository = remember(settings) { PuzzleImageRepository(context, settings) }
 
     val completedLevels by settings.completedLevelsFlow.collectAsState(initial = emptySet())
     val highestLevel by settings.highestLevelFlow.collectAsState(initial = 1)
@@ -34,6 +39,7 @@ fun CozyBlocksApp(settings: GameSettings) {
     val soundEnabled by settings.soundEnabledFlow.collectAsState(initial = true)
     val hapticsEnabled by settings.hapticsEnabledFlow.collectAsState(initial = true)
     val darkThemeEnabled by settings.darkThemeFlow.collectAsState(initial = false)
+    val imageSource by settings.imageSourceFlow.collectAsState(initial = com.hb.puzz.data.images.ImageSourceMode.PEXELS)
 
     fun goHome() {
         navController.navigate(Routes.HOME) {
@@ -79,10 +85,13 @@ fun CozyBlocksApp(settings: GameSettings) {
                 soundEnabled = soundEnabled,
                 hapticsEnabled = hapticsEnabled,
                 darkThemeEnabled = darkThemeEnabled,
+                imageSource = imageSource,
+                pexelsConfigured = imageRepository.isPexelsConfigured(),
                 onBack = { navController.popBackStack() },
                 onSoundChanged = { enabled -> scope.launch { settings.updateSoundEnabled(enabled) } },
                 onHapticsChanged = { enabled -> scope.launch { settings.updateHapticsEnabled(enabled) } },
                 onDarkThemeChanged = { enabled -> scope.launch { settings.updateDarkTheme(enabled) } },
+                onImageSourceChanged = { mode -> scope.launch { settings.updateImageSource(mode) } },
                 onResetProgress = {
                     scope.launch {
                         settings.resetProgress()
@@ -102,6 +111,8 @@ fun CozyBlocksApp(settings: GameSettings) {
             PicturePuzzleGameScreen(
                 levelId = levelId,
                 settings = settings,
+                imageRepository = imageRepository,
+                imageSource = imageSource,
                 soundEnabled = soundEnabled,
                 hapticsEnabled = hapticsEnabled,
                 onBack = { navController.popBackStack() },
