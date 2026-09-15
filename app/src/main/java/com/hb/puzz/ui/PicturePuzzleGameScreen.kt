@@ -214,19 +214,66 @@ fun PicturePuzzleGameScreen(
         Column(Modifier.verticalScroll(rememberScrollState())) {
             RewardCard(ui.receipt!!.awarded, ui.receipt!!.reward.completion, ui.receipt!!.reward.speed,
                 ui.receipt!!.reward.efficiency, ui.elapsedMillis, ui.moves, ui.speedEligible,
-                nextLabel = if (levelId == PuzzleLevel.maxLevelId) "Finish journey" else "Next discovery",
+                completionTitle = when {
+                    levelId % ADVENTURES_PER_MILESTONE == 0 -> milestoneTitle(levelId)
+                    else -> "Adventure Complete!"
+                },
+                nextLabel = if (levelId == PuzzleLevel.maxLevelId) "Finish Journey" else "Next Adventure",
                 onNext = { if (levelId == PuzzleLevel.maxLevelId) onHome() else onNextLevel(levelId + 1) })
         }
     }
     if (confirmRestart) AlertDialog(onDismissRequest = { confirmRestart = false },
-        title = { Text("Start this picture again?") },
+        title = { Text("Restart this adventure?") },
         text = { Text("This attempt’s moves and time will reset. Your collected coins are safe.") },
         confirmButton = { TextButton(onClick = { confirmRestart = false; vm.restart() }) { Text("Restart") } },
         dismissButton = { TextButton(onClick = { confirmRestart = false }) { Text("Keep playing") } })
     if (rewardInfo) AlertDialog(onDismissRequest = { rewardInfo = false },
-        title = { Text("Your picture coins") },
-        text = { Text("Aim for ${formatPlayTime(CoinRewards.targetSeconds(gridSize) * 1000L)} and ${CoinRewards.parMoves(gridSize)} moves in this puzzle. Earn coins for finishing, speed, and efficient moves. On a replay, earn the improvement over your previous best. Coins are a local game reward with no cash value.") },
+        title = { Text("Your adventure coins") },
+        text = { Text("Aim for ${formatPlayTime(CoinRewards.targetSeconds(gridSize) * 1000L)} and ${CoinRewards.parMoves(gridSize)} moves in this adventure. Earn coins for finishing, speed, and efficient moves. On a replay, earn the improvement over your previous best. Coins are a local game reward with no cash value.") },
         confirmButton = { TextButton(onClick = { rewardInfo = false }) { Text("Got it") } })
+}
+
+private const val ADVENTURES_PER_MILESTONE = 4
+
+private fun milestoneTitle(levelId: Int): String {
+    val milestoneNumber = levelId / ADVENTURES_PER_MILESTONE
+    return "${milestoneOrdinal(milestoneNumber)} Milestone Reached!"
+}
+
+private fun milestoneOrdinal(number: Int): String = when (number) {
+    1 -> "First"
+    2 -> "Second"
+    3 -> "Third"
+    4 -> "Fourth"
+    5 -> "Fifth"
+    6 -> "Sixth"
+    7 -> "Seventh"
+    8 -> "Eighth"
+    9 -> "Ninth"
+    10 -> "Tenth"
+    11 -> "Eleventh"
+    12 -> "Twelfth"
+    13 -> "Thirteenth"
+    14 -> "Fourteenth"
+    15 -> "Fifteenth"
+    16 -> "Sixteenth"
+    17 -> "Seventeenth"
+    18 -> "Eighteenth"
+    19 -> "Nineteenth"
+    20 -> "Twentieth"
+    else -> "${number}${ordinalSuffix(number)}"
+}
+
+private fun ordinalSuffix(number: Int): String {
+    val absNumber = kotlin.math.abs(number)
+    val lastTwo = absNumber % 100
+    if (lastTwo in 11..13) return "th"
+    return when (absNumber % 10) {
+        1 -> "st"
+        2 -> "nd"
+        3 -> "rd"
+        else -> "th"
+    }
 }
 
 @Composable
@@ -291,14 +338,14 @@ private fun CompactCoinCard(
 }
 @Composable
 private fun RewardCard(awarded: Int, base: Int, speed: Int, movesBonus: Int, elapsed: Long, moves: Int,
-    speedEligible: Boolean, nextLabel: String, onNext: () -> Unit) {
+    speedEligible: Boolean, completionTitle: String, nextLabel: String, onNext: () -> Unit) {
     var coinTarget by remember(awarded) { mutableIntStateOf(0) }
     LaunchedEffect(awarded) { coinTarget = awarded }
     val animatedCoins by animateIntAsState(coinTarget,
         animationSpec = androidx.compose.animation.core.tween(750), label = "earned-coins")
     Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("Picture complete!", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Text(completionTitle, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 GoldCoinIcon(Modifier.size(32.dp))
                 Text("+$animatedCoins coins", style = MaterialTheme.typography.headlineMedium,
@@ -307,7 +354,7 @@ private fun RewardCard(awarded: Int, base: Int, speed: Int, movesBonus: Int, ela
             Text("${formatPlayTime(elapsed)} active time · $moves moves")
             Text("Completion $base  +  Speed $speed  +  Moves $movesBonus", style = MaterialTheme.typography.bodySmall)
             if (!speedEligible) Text("This older save has no reliable time record, so no speed bonus applies.", style = MaterialTheme.typography.bodySmall)
-            if (awarded < base + speed + movesBonus) Text("Replay coins reflect the improvement over your best for this puzzle.", style = MaterialTheme.typography.bodySmall)
+            if (awarded < base + speed + movesBonus) Text("Replay coins reflect the improvement over your best for this adventure.", style = MaterialTheme.typography.bodySmall)
             Button(onClick = onNext, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(nextLabel) }
         }
     }
