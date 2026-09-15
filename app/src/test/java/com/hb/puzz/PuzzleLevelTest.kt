@@ -44,4 +44,20 @@ class PuzzleLevelTest {
         assertEquals("Medium · Focus Flow", PuzzleLevel.Difficulty.MEDIUM.displayLabel)
         assertEquals("Hard · Master Quest", PuzzleLevel.Difficulty.HARD.displayLabel)
     }
+    @Test
+    fun `grid shift allows at most two harder sizes and never beyond 8x8`() {
+        val easy = PuzzleLevel.requireLevel(1)
+        assertTrue(easy.acceptsSessionGridSize(4, 5))
+        assertTrue(easy.acceptsSessionGridSize(4, 6))
+        assertTrue(!easy.acceptsSessionGridSize(4, 7))
+
+        val six = PuzzleLevel.requireLevel(9)
+        assertTrue(six.acceptsSessionGridSize(6, 8))
+        assertTrue(!six.acceptsSessionGridSize(6, 9))
+
+        val max = PuzzleLevel.requireLevel(20)
+        assertTrue(max.acceptsSessionGridSize(8, 8))
+        assertTrue(!max.acceptsSessionGridSize(8, 9))
+    }
+
 }

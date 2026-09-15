@@ -27,7 +27,9 @@ data class PuzzleSession(
     val started: Boolean = false,
     // Old saves never measured elapsed play reliably; they receive completion/move rewards only.
     val speedEligible: Boolean = true,
-    val imageIdentity: String? = null
+    val imageIdentity: String? = null,
+    /** Original Adventure grid before the optional temporary Grid Shift. */
+    val baseGridSize: Int = gridSize
 )
 
 /**
@@ -52,6 +54,7 @@ data class HomeSnapshot(
     val highest: Int,
     val completed: Set<Int>,
     val saved: PuzzleSession?,
+    val crystals: Int,
     val coins: Int,
     val sound: Boolean,
     val haptics: Boolean,
@@ -63,11 +66,16 @@ data class HomeSnapshot(
 data class CompletionReceipt(val reward: CoinReward, val awarded: Int, val balance: Int)
 
 class GameSettings(context: Context) {
+    companion object {
+        const val INITIAL_CRYSTALS = 2
+    }
+
     private val store = context.applicationContext.picturePuzzleDataStore
     private val sessionKey = stringPreferencesKey("session_v2")
     private val completedKey = stringSetPreferencesKey("completed_levels")
     private val highestKey = intPreferencesKey("highest_level")
     private val coinsKey = intPreferencesKey("coin_balance_v1")
+    private val crystalsKey = intPreferencesKey("crystal_balance_v1")
     private val soundKey = booleanPreferencesKey("sound_enabled")
     private val hapticsKey = booleanPreferencesKey("haptics_enabled")
     private val darkKey = booleanPreferencesKey("dark_theme")
@@ -82,6 +90,7 @@ class GameSettings(context: Context) {
             highest = (p[highestKey] ?: 1).coerceIn(1, PuzzleLevel.maxLevelId),
             completed = completed,
             saved = decodeSession(p),
+            crystals = (p[crystalsKey] ?: INITIAL_CRYSTALS).coerceAtLeast(0),
             coins = p[coinsKey] ?: 0,
             sound = p[soundKey] ?: true,
             haptics = p[hapticsKey] ?: true,
@@ -93,6 +102,7 @@ class GameSettings(context: Context) {
     val completedLevelsFlow = store.data.map { (it[completedKey] ?: emptySet()).mapNotNull(String::toIntOrNull).toSet() }
     val highestLevelFlow = store.data.map { (it[highestKey] ?: 1).coerceIn(1, PuzzleLevel.maxLevelId) }
     val coinBalanceFlow = store.data.map { it[coinsKey] ?: 0 }
+    val crystalBalanceFlow = store.data.map { (it[crystalsKey] ?: INITIAL_CRYSTALS).coerceAtLeast(0) }
     val soundEnabledFlow = store.data.map { it[soundKey] ?: true }
     val hapticsEnabledFlow = store.data.map { it[hapticsKey] ?: true }
     val darkThemeFlow = store.data.map { it[darkKey] ?: false }
@@ -110,7 +120,11 @@ class GameSettings(context: Context) {
         val positions = raw.split(',').map(String::toInt).toIntArray()
         val grid = json?.getInt("grid") ?: p[intPreferencesKey("saved_grid_size")]
             ?: kotlin.math.sqrt(positions.size.toDouble()).toInt()
-        if (!level.acceptsGridSize(grid) || positions.size != grid * grid ||
+        val baseGrid = json?.optInt("baseGrid", 0)?.takeIf { it > 0 } ?: run {
+            // Old saves predate Grid Shift. Their stored grid was always a normal Adventure grid.
+            if (level.acceptsBaseGridSize(grid)) grid else level.gridSize
+        }
+        if (!level.acceptsSessionGridSize(baseGrid, grid) || positions.size != grid * grid ||
             positions.toSet().size != positions.size || positions.any { it !in positions.indices }) return null
         PuzzleSession(id, grid, positions,
             (json?.optInt("moves") ?: p[intPreferencesKey("saved_moves")] ?: 0).coerceAtLeast(0),
@@ -119,7 +133,8 @@ class GameSettings(context: Context) {
             json?.optString("source")?.takeIf { it.isNotBlank() }?.let(ImageSourceMode::fromStored),
             json?.optBoolean("started") ?: false,
             json?.optBoolean("speedEligible", true) ?: false,
-            json?.optString("imageIdentity")?.takeIf { it.isNotBlank() })
+            json?.optString("imageIdentity")?.takeIf { it.isNotBlank() },
+            baseGrid)
     }.getOrNull()
 
     private fun decodeHistory(p: Preferences, completed: Set<Int>): List<AdventureHistoryEntry> =
@@ -166,7 +181,7 @@ class GameSettings(context: Context) {
     }.toString()
 
     suspend fun saveSession(s: PuzzleSession) {
-        require(PuzzleLevel.requireLevel(s.levelId).acceptsGridSize(s.gridSize))
+        require(PuzzleLevel.requireLevel(s.levelId).acceptsSessionGridSize(s.baseGridSize, s.gridSize))
         require(s.positions.size == s.gridSize * s.gridSize && s.positions.toSet().size == s.positions.size)
         require(s.positions.all { it in s.positions.indices })
         store.edit { p -> p[sessionKey] = encode(s); removeLegacySession(p) }
@@ -176,6 +191,7 @@ class GameSettings(context: Context) {
         put("moves", s.moveCount); put("elapsed", s.elapsedMillis); put("id", s.sessionId)
         put("source", s.imageSource?.storedValue ?: ""); put("started", s.started)
         put("speedEligible", s.speedEligible); put("imageIdentity", s.imageIdentity ?: "")
+        put("baseGrid", s.baseGridSize)
     }.toString()
 
     private fun removeLegacySession(p: MutablePreferences) {
@@ -239,6 +255,31 @@ class GameSettings(context: Context) {
             receipt = CompletionReceipt(reward, award, balance)
         }
         return checkNotNull(receipt)
+    }
+
+    /**
+     * Crystals are a lifetime power wallet. A new player receives exactly two free Crystals.
+     * Journey reset intentionally does not replenish them. Only entering a harder Grid Shift spends one.
+     */
+    suspend fun trySpendCrystal(): Boolean {
+        var spent = false
+        store.edit { p ->
+            val current = (p[crystalsKey] ?: INITIAL_CRYSTALS).coerceAtLeast(0)
+            if (current > 0) {
+                p[crystalsKey] = current - 1
+                spent = true
+            }
+        }
+        return spent
+    }
+
+    /** Purchase-credit hook. Call this only after Google Play Billing confirms a purchase. */
+    suspend fun creditPurchasedCrystals(amount: Int) {
+        require(amount > 0)
+        store.edit { p ->
+            val current = (p[crystalsKey] ?: INITIAL_CRYSTALS).coerceAtLeast(0)
+            p[crystalsKey] = current + amount
+        }
     }
 
     suspend fun updateSoundEnabled(v: Boolean) { store.edit { it[soundKey] = v } }

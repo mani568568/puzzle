@@ -7,6 +7,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.animateIntAsState
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -24,6 +25,7 @@ import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
@@ -71,8 +73,10 @@ fun PicturePuzzleGameScreen(
     val vm: PuzzleGameViewModel = viewModel(key = "puzzle-$levelId-$gridSize", factory = factory)
     val ui by vm.state.collectAsStateWithLifecycle()
     val wallet by settings.coinBalanceFlow.collectAsStateWithLifecycle(initialValue = 0)
+    val crystals by settings.crystalBalanceFlow.collectAsStateWithLifecycle(initialValue = GameSettings.INITIAL_CRYSTALS)
     var confirmRestart by remember { mutableStateOf(false) }
     var rewardInfo by remember { mutableStateOf(false) }
+    var crystalInfo by remember { mutableStateOf(false) }
     var resultsVisible by remember { mutableStateOf(false) }
     LaunchedEffect(ui.receipt) {
         resultsVisible = false
@@ -81,6 +85,10 @@ fun PicturePuzzleGameScreen(
     val context = LocalContext.current
     val feedback = remember { PuzzleFeedbackPlayer(context) }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
+    val currentGridSize = ui.gridSize.takeIf { it >= 2 } ?: gridSize
+    val baseGridSize = ui.baseGridSize.takeIf { it >= 2 } ?: gridSize
+    val gridShifted = currentGridSize != baseGridSize
+    val canIncreaseGrid = baseGridSize < PuzzleLevel.MAX_GRID_SIZE
     val totalConnections = vm.engine.getTotalPossibleConnections()
     val progress = ui.connections.toFloat() / totalConnections
     val animatedProgress by animateFloatAsState(progress, tween(400), label = "connections")
@@ -119,8 +127,15 @@ fun PicturePuzzleGameScreen(
                 }
                 CompactStatCard("TIME", formatPlayTime(ui.elapsedMillis), Modifier.weight(1f), softPanel)
                 CompactStatCard("MOVES", "${ui.moves}", Modifier.weight(1f), softPanel)
-                CompactStatCard("TARGET", "${CoinRewards.parMoves(gridSize)}", Modifier.weight(1f), softPanel)
-                CompactCoinCard(wallet, Modifier.weight(1f), softPanel) { rewardInfo = true }
+                CompactStatCard("TARGET", "${CoinRewards.parMoves(currentGridSize)}", Modifier.weight(1f), softPanel)
+                CompactWalletCard(
+                    crystals = crystals,
+                    coins = wallet,
+                    modifier = Modifier.weight(1.28f),
+                    background = softPanel,
+                    onCrystalClick = { crystalInfo = true },
+                    onCoinClick = { rewardInfo = true }
+                )
             }
             Surface(
                 Modifier.fillMaxWidth().aspectRatio(0.94f),
@@ -155,6 +170,51 @@ fun PicturePuzzleGameScreen(
                         }
                     }
                 }
+            }
+            FilledTonalButton(
+                onClick = {
+                    if (!gridShifted && canIncreaseGrid && crystals <= 0) crystalInfo = true
+                    else vm.toggleGridShift()
+                },
+                enabled = !ui.loading && !ui.solved && ui.image != null && (gridShifted || canIncreaseGrid),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 46.dp)
+                    .semantics {
+                        contentDescription = when {
+                            gridShifted -> "Restore the original puzzle grid for free"
+                            !canIncreaseGrid -> "Maximum puzzle grid reached"
+                            crystals > 0 -> "Spend one Crystal to randomly increase the puzzle grid by one or two levels"
+                            else -> "No Crystals remaining. Grid Shift is unavailable until more are purchased"
+                        }
+                    },
+                colors = ButtonDefaults.filledTonalButtonColors(
+                    containerColor = if (gridShifted) {
+                        MaterialTheme.colorScheme.tertiaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.secondaryContainer
+                    }
+                )
+            ) {
+                Icon(
+                    imageVector = when {
+                        gridShifted -> Icons.Default.Restore
+                        canIncreaseGrid -> Icons.Default.GridView
+                        else -> Icons.Default.CheckCircle
+                    },
+                    contentDescription = null,
+                    modifier = Modifier.size(19.dp)
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = when {
+                        gridShifted -> "Restore Grid · Free"
+                        !canIncreaseGrid -> "Max Grid"
+                        crystals > 0 -> "Grid Shift · 1 Crystal"
+                        else -> "No Crystals · Buy to Shift"
+                    },
+                    fontWeight = FontWeight.SemiBold
+                )
             }
             Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp),
                 color = softPanel) {
@@ -229,8 +289,16 @@ fun PicturePuzzleGameScreen(
         dismissButton = { TextButton(onClick = { confirmRestart = false }) { Text("Keep playing") } })
     if (rewardInfo) AlertDialog(onDismissRequest = { rewardInfo = false },
         title = { Text("Your adventure coins") },
-        text = { Text("Aim for ${formatPlayTime(CoinRewards.targetSeconds(gridSize) * 1000L)} and ${CoinRewards.parMoves(gridSize)} moves in this adventure. Earn coins for finishing, speed, and efficient moves. On a replay, earn the improvement over your previous best. Coins are a local game reward with no cash value.") },
+        text = { Text("Aim for ${formatPlayTime(CoinRewards.targetSeconds(currentGridSize) * 1000L)} and ${CoinRewards.parMoves(currentGridSize)} moves in this adventure. Earn coins for finishing, speed, and efficient moves. On a replay, earn the improvement over your previous best. Coins are a local game reward with no cash value.") },
         confirmButton = { TextButton(onClick = { rewardInfo = false }) { Text("Got it") } })
+    if (crystalInfo) AlertDialog(onDismissRequest = { crystalInfo = false },
+        icon = { CrystalIcon(28.dp) },
+        title = { Text(if (crystals > 0) "Crystal Power" else "No Crystals left") },
+        text = { Text(if (crystals > 0)
+            "You have $crystals Crystal${if (crystals == 1) "" else "s"}. Grid Shift spends 1 Crystal to rebuild the current Adventure on a randomly harder grid, up to two grid levels higher. Restoring the original grid is free."
+        else
+            "Your two free Journey Crystals have been used. Grid Shift cannot increase the grid until more Crystals are purchased. The wallet is ready for Google Play Billing to credit purchased Crystals.") },
+        confirmButton = { TextButton(onClick = { crystalInfo = false }) { Text("Got it") } })
 }
 
 private const val ADVENTURES_PER_MILESTONE = 4
@@ -290,6 +358,45 @@ fun CoinPill(coins: Int, onClick: () -> Unit = {}) {
 }
 
 @Composable
+fun CrystalPill(crystals: Int, onClick: () -> Unit = {}) {
+    Surface(onClick = onClick, modifier = Modifier.heightIn(min = 48.dp).semantics(mergeDescendants = true) {
+        contentDescription = "$crystals crystals. Grid Shift power"
+    }, shape = CircleShape, color = MaterialTheme.colorScheme.secondaryContainer) {
+        Row(Modifier.padding(horizontal = 11.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            CrystalIcon(20.dp)
+            Spacer(Modifier.width(4.dp))
+            Text("$crystals", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSecondaryContainer)
+        }
+    }
+}
+
+@Composable
+fun CrystalIcon(size: androidx.compose.ui.unit.Dp = 18.dp) {
+    Canvas(Modifier.size(size)) {
+        val w = this.size.width
+        val h = this.size.height
+        val outer = Path().apply {
+            moveTo(w * 0.50f, h * 0.04f)
+            lineTo(w * 0.88f, h * 0.34f)
+            lineTo(w * 0.69f, h * 0.91f)
+            lineTo(w * 0.31f, h * 0.91f)
+            lineTo(w * 0.12f, h * 0.34f)
+            close()
+        }
+        drawPath(outer, color = Color(0xFF55C7F3))
+        val shine = Path().apply {
+            moveTo(w * 0.50f, h * 0.09f)
+            lineTo(w * 0.73f, h * 0.35f)
+            lineTo(w * 0.51f, h * 0.76f)
+            lineTo(w * 0.34f, h * 0.36f)
+            close()
+        }
+        drawPath(shine, color = Color(0xFFCFF5FF))
+        drawLine(Color.White.copy(alpha = 0.9f), start = androidx.compose.ui.geometry.Offset(w * 0.22f, h * 0.34f), end = androidx.compose.ui.geometry.Offset(w * 0.78f, h * 0.34f), strokeWidth = (w * 0.055f).coerceAtLeast(1f))
+    }
+}
+
+@Composable
 private fun CompactStatCard(
     label: String,
     value: String,
@@ -309,33 +416,47 @@ private fun CompactStatCard(
 }
 
 @Composable
-private fun CompactCoinCard(
+private fun CompactWalletCard(
+    crystals: Int,
     coins: Int,
     modifier: Modifier,
     background: Color,
-    onClick: () -> Unit
+    onCrystalClick: () -> Unit,
+    onCoinClick: () -> Unit
 ) {
-    Surface(
-        onClick = onClick,
-        modifier = modifier.heightIn(min = 48.dp).semantics(mergeDescendants = true) {
-            contentDescription = "$coins gold coins. Reward details"
-        },
-        shape = RoundedCornerShape(14.dp),
-        color = background
-    ) {
-        Column(
-            Modifier.padding(horizontal = 4.dp, vertical = 6.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+    Surface(modifier.heightIn(min = 48.dp), shape = RoundedCornerShape(14.dp), color = background) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 5.dp, vertical = 5.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceEvenly
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                GoldCoinIcon(Modifier.size(16.dp))
-                Text("$coins", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, maxLines = 1)
+            Surface(
+                onClick = onCrystalClick,
+                color = Color.Transparent,
+                modifier = Modifier.semantics { contentDescription = "$crystals crystals. Grid Shift power" }
+            ) {
+                Row(Modifier.padding(horizontal = 3.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+                    CrystalIcon(18.dp)
+                    Spacer(Modifier.width(3.dp))
+                    Text("$crystals", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, maxLines = 1)
+                }
             }
-            Text("COINS", style = MaterialTheme.typography.labelSmall, maxLines = 1)
+            Text("·", color = MaterialTheme.colorScheme.outline)
+            Surface(
+                onClick = onCoinClick,
+                color = Color.Transparent,
+                modifier = Modifier.semantics { contentDescription = "$coins gold coins. Reward details" }
+            ) {
+                Row(Modifier.padding(horizontal = 3.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+                    GoldCoinIcon(Modifier.size(18.dp))
+                    Spacer(Modifier.width(3.dp))
+                    Text("$coins", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, maxLines = 1)
+                }
+            }
         }
     }
 }
+
 @Composable
 private fun RewardCard(awarded: Int, base: Int, speed: Int, movesBonus: Int, elapsed: Long, moves: Int,
     speedEligible: Boolean, completionTitle: String, nextLabel: String, onNext: () -> Unit) {

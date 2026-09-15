@@ -23,7 +23,22 @@ data class PuzzleLevel(
 
     val isRandomGrid: Boolean get() = randomGridSizes != null
 
-    fun acceptsGridSize(size: Int): Boolean = randomGridSizes?.contains(size) ?: (size == gridSize)
+    /** The grid selected when an Adventure starts normally, before the optional Grid Shift. */
+    fun acceptsBaseGridSize(size: Int): Boolean = randomGridSizes?.contains(size) ?: (size == gridSize)
+
+    /**
+     * A saved/current session may temporarily use a Grid Shift up to two sizes above its base.
+     * This keeps the same Adventure/image while allowing a harder board such as 4×4 -> 5×5/6×6.
+     */
+    fun acceptsSessionGridSize(baseGridSize: Int, size: Int): Boolean =
+        acceptsBaseGridSize(baseGridSize) &&
+            size in baseGridSize..minOf(baseGridSize + 2, MAX_GRID_SIZE)
+
+    /** Broad route validation. The exact base/shift pairing is validated in GameSettings. */
+    fun acceptsGridSize(size: Int): Boolean {
+        val baseRange = randomGridSizes ?: (gridSize..gridSize)
+        return size in baseRange.first..minOf(baseRange.last + 2, MAX_GRID_SIZE)
+    }
 
     fun pickGridSize(random: Random = Random.Default): Int {
         val range = randomGridSizes ?: return gridSize
@@ -36,6 +51,9 @@ data class PuzzleLevel(
         } ?: "${gridSize}×${gridSize} Grid"
 
     companion object {
+        /** Keep tiles comfortably touchable and within the reward/performance model. */
+        const val MAX_GRID_SIZE: Int = 8
+
         /**
          * Progression philosophy:
          *  - Chapters 1–5: 4×4 so players learn the merge mechanic without tiny tiles.

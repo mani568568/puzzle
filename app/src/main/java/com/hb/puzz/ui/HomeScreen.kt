@@ -52,6 +52,7 @@ import com.hb.puzz.data.images.ImageSourceMode
 
 @Composable
 fun HomeScreen(
+    crystalBalance: Int,
     coinBalance: Int,
     completedCount: Int,
     hasSavedGame: Boolean,
@@ -78,7 +79,10 @@ fun HomeScreen(
             horizontalArrangement = Arrangement.SpaceBetween) {
             Text("ADVENTURE JOURNEY", style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-            CoinPill(coinBalance, onClick = onHowToPlay)
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                CrystalPill(crystalBalance, onClick = onHowToPlay)
+                CoinPill(coinBalance, onClick = onHowToPlay)
+            }
         }
         Text(if (journeyComplete) "A beautiful journey." else "A little focus.\nA beautiful picture.",
             modifier = Modifier.fillMaxWidth(), style = MaterialTheme.typography.headlineLarge,
@@ -204,7 +208,7 @@ fun SettingsScreen(
         AlertDialog(
             onDismissRequest = { confirmReset = false },
             title = { Text("Reset journey progress?") },
-            text = { Text("Completed Adventures, Journey Journal history and the saved puzzle will be cleared. Your coins, personal bests, settings and cached photos will stay unchanged.") },
+            text = { Text("Completed Adventures, Journey Journal history and the saved puzzle will be cleared. Your coins, Crystals, personal bests, settings and cached photos will stay unchanged.") },
             confirmButton = {
                 TextButton(onClick = {
                     confirmReset = false
@@ -272,7 +276,9 @@ fun HowToPlayScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
         Spacer(Modifier.height(16.dp))
         Text("7. Coins = completion + speed + efficient moves. The fixed targets depend on grid size. Replays award only improvement over your Adventure best. Coins have no cash value.", style = MaterialTheme.typography.bodyLarge)
         Spacer(Modifier.height(16.dp))
-        Text("8. Turn on Guides for numbered pieces. Arrange 1, 2, 3… from left to right, top to bottom. Guides are especially useful for similar-looking sky or blank pieces.", style = MaterialTheme.typography.bodyLarge)
+        Text("8. Crystal Power: every player receives 2 free Crystals for the whole Journey. Grid Shift spends 1 Crystal to rebuild the current Adventure on a randomly harder grid, up to +2 sizes. Restore Grid is always free. When Crystals reach 0, harder Grid Shift is locked until more are purchased.", style = MaterialTheme.typography.bodyLarge)
+        Spacer(Modifier.height(16.dp))
+        Text("9. Turn on Guides for numbered pieces. Arrange 1, 2, 3… from left to right, top to bottom. Guides are especially useful for similar-looking sky or blank pieces.", style = MaterialTheme.typography.bodyLarge)
     }
 }
 
@@ -293,7 +299,7 @@ private fun ScreenHeader(title: String, onBack: () -> Unit) {
 @Composable
 private fun HomeLightPreview() {
     com.hb.puzz.ui.theme.CozyBlocksTheme(darkTheme = false) {
-        HomeScreen(coinBalance = 640, completedCount = 8, hasSavedGame = true,
+        HomeScreen(crystalBalance = 2, coinBalance = 640, completedCount = 8, hasSavedGame = true,
             currentChapter = 9, currentChapterTitle = "Red Rock Valley",
             currentDifficulty = "Medium · Focus Flow", currentGridDescription = "6×6 Grid",
             journeyComplete = false, onContinue = {}, onStartJourney = {}, onJourneyHistory = {}, onHowToPlay = {}, onSettings = {})
@@ -303,7 +309,7 @@ private fun HomeLightPreview() {
 @Composable
 private fun HomeDarkPreview() {
     com.hb.puzz.ui.theme.CozyBlocksTheme(darkTheme = true) {
-        HomeScreen(coinBalance = 640, completedCount = 8, hasSavedGame = true,
+        HomeScreen(crystalBalance = 2, coinBalance = 640, completedCount = 8, hasSavedGame = true,
             currentChapter = 9, currentChapterTitle = "Red Rock Valley",
             currentDifficulty = "Medium · Focus Flow", currentGridDescription = "6×6 Grid",
             journeyComplete = false, onContinue = {}, onStartJourney = {}, onJourneyHistory = {}, onHowToPlay = {}, onSettings = {})

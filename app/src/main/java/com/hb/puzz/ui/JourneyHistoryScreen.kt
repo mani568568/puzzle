@@ -74,7 +74,10 @@ fun JourneyHistoryScreen(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            CoinPill(home.coins)
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                CrystalPill(home.crystals)
+                CoinPill(home.coins)
+            }
         }
 
         JourneySummaryCard(

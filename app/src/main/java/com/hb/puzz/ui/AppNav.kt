@@ -68,6 +68,7 @@ fun CozyBlocksApp(settings: GameSettings) {
             val currentLevel = PuzzleLevel.requireLevel(currentChapter)
             val currentChapterTitle = currentLevel.title
             HomeScreen(
+                crystalBalance = home.crystals,
                 coinBalance = home.coins,
                 completedCount = completedLevels.size,
                 hasSavedGame = savedSession != null,

@@ -27,7 +27,9 @@ data class PicturePuzzleUiState(
     val receipt: CompletionReceipt? = null,
     val error: String? = null,
     val saveError: Boolean = false,
-    val speedEligible: Boolean = true
+    val speedEligible: Boolean = true,
+    val gridSize: Int = 0,
+    val baseGridSize: Int = 0
 )
 
 class PuzzleGameViewModel(
@@ -37,9 +39,16 @@ class PuzzleGameViewModel(
     private val repository: PuzzleImageRepository,
     private val preferredSource: ImageSourceMode
 ) : ViewModel() {
-    val engine = PuzzleEngine(gridSize)
+    var engine: PuzzleEngine = PuzzleEngine(gridSize)
+        private set
     private val clock = ActivePlayClock(SystemClock::elapsedRealtime)
-    private var session = PuzzleSession(levelId, gridSize, engine.getCurrentPositions(), 0)
+    private var session = PuzzleSession(
+        levelId = levelId,
+        gridSize = gridSize,
+        positions = engine.getCurrentPositions(),
+        moveCount = 0,
+        baseGridSize = gridSize
+    )
     private val mutable = MutableStateFlow(PicturePuzzleUiState())
     val state = mutable.asStateFlow()
     // Ordered writes survive screen disposal, then drain and release their scope.
@@ -54,6 +63,7 @@ class PuzzleGameViewModel(
     private var leaving = false
     private var loadJob: Job? = null
     private var celebrationJob: Job? = null
+    private var gridShiftBusy = false
 
     init {
         load()
@@ -94,7 +104,8 @@ class PuzzleGameViewModel(
                     boardVersion = mutable.value.boardVersion + 1, moves = session.moveCount,
                     elapsedMillis = session.elapsedMillis, started = session.started,
                     solved = engine.isSolved(), connections = engine.getCorrectConnections().size,
-                    speedEligible = session.speedEligible)
+                    speedEligible = session.speedEligible, gridSize = engine.gridSize,
+                    baseGridSize = session.baseGridSize)
                 if (engine.isSolved()) finish() else checkpoint()
             } catch (e: CancellationException) { throw e }
             catch (_: Exception) {
@@ -198,7 +209,71 @@ class PuzzleGameViewModel(
         session = session.copy(sessionId = UUID.randomUUID().toString(), positions = engine.getCurrentPositions(),
             moveCount = 0, elapsedMillis = 0, started = false, speedEligible = true)
         mutable.value = PicturePuzzleUiState(loading = false, image = mutable.value.image,
-            boardVersion = mutable.value.boardVersion + 1, connections = engine.getCorrectConnections().size)
+            boardVersion = mutable.value.boardVersion + 1, connections = engine.getCorrectConnections().size,
+            gridSize = engine.gridSize, baseGridSize = session.baseGridSize)
+        checkpoint()
+    }
+
+    /**
+     * First press moves the current Adventure to a randomly harder grid (+1 or +2).
+     * Pressing again restores the original grid. A grid change intentionally starts a fresh
+     * arrangement because pieces from different grid sizes cannot be mapped safely.
+     */
+    fun toggleGridShift() {
+        val current = mutable.value
+        if (gridShiftBusy || current.loading || current.error != null || current.solved || current.image == null) return
+
+        val baseGrid = session.baseGridSize.coerceAtLeast(2)
+        if (engine.gridSize != baseGrid) {
+            // Restoring the Adventure's original board is always free.
+            applyGridSize(baseGrid, current)
+            return
+        }
+
+        val highestShift = minOf(baseGrid + 2, PuzzleLevel.MAX_GRID_SIZE)
+        if (highestShift <= baseGrid) return
+
+        gridShiftBusy = true
+        viewModelScope.launch {
+            try {
+                // Charge exactly once before entering the harder board. If the wallet is empty,
+                // nothing about the current puzzle changes.
+                if (!settings.trySpendCrystal()) return@launch
+                val latest = mutable.value
+                if (latest.loading || latest.error != null || latest.solved || latest.image == null) return@launch
+                val targetGrid = kotlin.random.Random.nextInt(baseGrid + 1, highestShift + 1)
+                applyGridSize(targetGrid, latest)
+            } finally {
+                gridShiftBusy = false
+            }
+        }
+    }
+
+    private fun applyGridSize(targetGrid: Int, current: PicturePuzzleUiState) {
+        celebrationJob?.cancel()
+        clock.pause()
+        val baseGrid = session.baseGridSize.coerceAtLeast(2)
+
+        engine = PuzzleEngine(targetGrid)
+        clock.restore(0)
+        session = session.copy(
+            gridSize = targetGrid,
+            positions = engine.getCurrentPositions(),
+            moveCount = 0,
+            elapsedMillis = 0,
+            sessionId = UUID.randomUUID().toString(),
+            started = false,
+            speedEligible = true,
+            baseGridSize = baseGrid
+        )
+        mutable.value = PicturePuzzleUiState(
+            loading = false,
+            image = current.image,
+            boardVersion = current.boardVersion + 1,
+            connections = engine.getCorrectConnections().size,
+            gridSize = targetGrid,
+            baseGridSize = baseGrid
+        )
         checkpoint()
     }
     override fun onCleared() {
