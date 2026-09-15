@@ -8,6 +8,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.animateIntAsState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -24,6 +25,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -142,21 +144,41 @@ fun PicturePuzzleGameScreen(
             val puzzleAspectRatio = ui.image?.bitmap?.let { bitmap ->
                 if (bitmap.height > 0) bitmap.width.toFloat() / bitmap.height.toFloat() else 1f
             } ?: 1f
+            // Keep the frame OUTSIDE the artwork instead of painting a border on top of it.
+            // A 1dp frame avoids the previous overlap where the rounded stroke covered the
+            // image corners and merged-block outlines. The smaller radius keeps the board
+            // rectangular and puzzle-like instead of looking like an oval card.
+            val puzzleFrameShape = RoundedCornerShape(7.dp)
+            val puzzleContentShape = RoundedCornerShape(6.dp)
+            val puzzleFrameColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.52f)
             Surface(
-                Modifier.fillMaxWidth().aspectRatio(puzzleAspectRatio),
-                shape = RoundedCornerShape(18.dp),
-                tonalElevation = 2.dp,
+                Modifier.fillMaxWidth(),
+                shape = puzzleFrameShape,
+                color = puzzleFrameColor,
+                tonalElevation = 0.dp,
                 shadowElevation = 3.dp
             ) {
-                Box(Modifier.fillMaxSize().padding(4.dp), contentAlignment = Alignment.Center) {
+                Box(
+                    Modifier
+                        .padding(1.dp)
+                        .fillMaxWidth()
+                        .aspectRatio(puzzleAspectRatio)
+                        .clip(puzzleContentShape)
+                        .background(MaterialTheme.colorScheme.surface),
+                    contentAlignment = Alignment.Center
+                ) {
                     when {
                         ui.loading -> CircularProgressIndicator()
                         ui.error != null -> Column(Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(ui.error!!)
                             Button(onClick = vm::load) { Text("Try again") }
                         }
-                        ui.solved && ui.celebration.isEmpty() && ui.image != null -> Image(ui.image!!.bitmap.asImageBitmap(), "Completed picture",
-                            Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
+                        ui.solved && ui.celebration.isEmpty() && ui.image != null -> Image(
+                            ui.image!!.bitmap.asImageBitmap(),
+                            "Completed picture",
+                            Modifier.fillMaxSize(),
+                            contentScale = ContentScale.FillBounds
+                        )
                         ui.image != null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             PuzzleBoard(vm.engine, ui.boardVersion, ui.image!!.bitmap.asImageBitmap(),
                                 ui.celebration, ui.celebrationVersion,

@@ -105,17 +105,15 @@ fun PuzzleBoard(
         val tileWidthPx = with(density) { tileWidth.toPx() }
         val tileHeightPx = with(density) { tileHeight.toPx() }
 
+        // The screen owns the outer 1dp frame. This shape matches only the inner artwork
+        // footprint, so tile borders and merged outlines can never paint over the frame.
         val boardShape = RoundedCornerShape(6.dp)
         Box(
             modifier = Modifier
                 .width(boardWidth)
                 .height(boardHeight)
-                // One shared mask for background, artwork, merged groups and border.
-                // This prevents the image corners from extending underneath a differently
-                // rounded border and keeps the visible edge pixel-aligned.
                 .clip(boardShape)
                 .background(surface, boardShape)
-                .border(1.dp, gridBorder, boardShape)
         ) {
             // A single shared preview footprint keeps merged pieces looking like one object.
             val anchor = draggingAnchorTileId
