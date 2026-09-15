@@ -25,6 +25,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -104,12 +105,17 @@ fun PuzzleBoard(
         val tileWidthPx = with(density) { tileWidth.toPx() }
         val tileHeightPx = with(density) { tileHeight.toPx() }
 
+        val boardShape = RoundedCornerShape(6.dp)
         Box(
             modifier = Modifier
                 .width(boardWidth)
                 .height(boardHeight)
-                .background(surface, RoundedCornerShape(10.dp))
-                .border(1.dp, gridBorder, RoundedCornerShape(10.dp))
+                // One shared mask for background, artwork, merged groups and border.
+                // This prevents the image corners from extending underneath a differently
+                // rounded border and keeps the visible edge pixel-aligned.
+                .clip(boardShape)
+                .background(surface, boardShape)
+                .border(1.dp, gridBorder, boardShape)
         ) {
             // A single shared preview footprint keeps merged pieces looking like one object.
             val anchor = draggingAnchorTileId
@@ -140,16 +146,16 @@ fun PuzzleBoard(
                             val color = dragAccent.copy(alpha = 0.88f)
 
                             if (row == 0 || position - gridSize !in previewPositions) {
-                                drawLine(color, Offset(left, top), Offset(right, top), stroke, StrokeCap.Round)
+                                drawLine(color, Offset(left, top), Offset(right, top), stroke, StrokeCap.Butt)
                             }
                             if (row == gridSize - 1 || position + gridSize !in previewPositions) {
-                                drawLine(color, Offset(left, bottom), Offset(right, bottom), stroke, StrokeCap.Round)
+                                drawLine(color, Offset(left, bottom), Offset(right, bottom), stroke, StrokeCap.Butt)
                             }
                             if (col == 0 || position - 1 !in previewPositions) {
-                                drawLine(color, Offset(left, top), Offset(left, bottom), stroke, StrokeCap.Round)
+                                drawLine(color, Offset(left, top), Offset(left, bottom), stroke, StrokeCap.Butt)
                             }
                             if (col == gridSize - 1 || position + 1 !in previewPositions) {
-                                drawLine(color, Offset(right, top), Offset(right, bottom), stroke, StrokeCap.Round)
+                                drawLine(color, Offset(right, top), Offset(right, bottom), stroke, StrokeCap.Butt)
                             }
                         }
                     }
@@ -417,7 +423,7 @@ fun PuzzleBoard(
                         contourPaths.forEach { contour ->
                             drawPath(contour, if (isDragging) dragAccent else gridBorder.copy(alpha = 0.8f),
                                 style = Stroke(if (isDragging) 2.dp.toPx() else 1.25.dp.toPx(),
-                                    cap = StrokeCap.Round, join = StrokeJoin.Round))
+                                    cap = StrokeCap.Butt, join = StrokeJoin.Miter))
                         }
 
                         if (mergeProgress.value < 1f) {
@@ -443,12 +449,12 @@ fun PuzzleBoard(
                                     drawPath(
                                         trail,
                                         Color(0xFFF6C554).copy(alpha = alpha),
-                                        style = Stroke(2.8.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                                        style = Stroke(2.8.dp.toPx(), cap = StrokeCap.Butt, join = StrokeJoin.Miter)
                                     )
                                     drawPath(
                                         trail,
                                         Color.White.copy(alpha = alpha * 0.94f),
-                                        style = Stroke(0.9.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                                        style = Stroke(0.9.dp.toPx(), cap = StrokeCap.Butt, join = StrokeJoin.Miter)
                                     )
                                 }
                                 remainingLength -= measure.length
@@ -468,7 +474,7 @@ fun PuzzleBoard(
                                     drawPath(
                                         contour,
                                         Color(0xFFFFE99C).copy(alpha = lockPulse * 0.82f),
-                                        style = Stroke(2.1.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                                        style = Stroke(2.1.dp.toPx(), cap = StrokeCap.Butt, join = StrokeJoin.Miter)
                                     )
                                 }
                             }

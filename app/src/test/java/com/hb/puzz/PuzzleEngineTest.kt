@@ -223,4 +223,65 @@ class PuzzleEngineTest {
         }
     }
 
+
+    @Test
+    fun `hint solves one block at a time and repeated hints finish puzzle`() {
+        val engine = PuzzleEngine(3, 12345L)
+        assertTrue(engine.restorePositions(intArrayOf(8, 6, 5, 0, 1, 7, 4, 3, 2)))
+
+        var previousCorrectTiles = engine.getCurrentPositions().indices.count {
+            engine.getCurrentPositions()[it] == it
+        }
+        var steps = 0
+        while (!engine.isSolved() && steps < 9) {
+            val moved = engine.applyHintStep()
+            assertTrue(moved.isNotEmpty())
+            val positions = engine.getCurrentPositions()
+            val correctTiles = positions.indices.count { positions[it] == it }
+            assertTrue(correctTiles > previousCorrectTiles)
+            previousCorrectTiles = correctTiles
+            assertTrue(engine.isValidPermutation())
+            steps++
+        }
+
+        assertTrue(engine.isSolved())
+        assertTrue(steps in 1..9)
+        assertTrue(engine.applyHintStep().isEmpty())
+    }
+
+    @Test
+    fun `hint selection is randomized instead of directional`() {
+        val restored = intArrayOf(8, 6, 5, 0, 1, 7, 4, 3, 2)
+
+        val firstHintGroups = (1L..10L).map { seed ->
+            val engine = PuzzleEngine(3, seed)
+            assertTrue(engine.restorePositions(restored))
+            val moved = engine.applyHintStep()
+            assertTrue(moved.isNotEmpty())
+            assertTrue(engine.isValidPermutation())
+            moved.sorted()
+        }
+
+        // Different random seeds should not always pick the same board edge/row first.
+        assertTrue(firstHintGroups.distinct().size > 1)
+    }
+
+    @Test
+    fun `fresh adventure always begins with zero completion`() {
+        for (grid in 2..8) {
+            for (seed in 1L..20L) {
+                val engine = PuzzleEngine(grid, seed)
+                assertFalse(engine.isSolved())
+                assertTrue(engine.getCorrectConnections().isEmpty())
+
+                repeat(4) {
+                    engine.shuffle()
+                    assertFalse(engine.isSolved())
+                    assertTrue(engine.getCorrectConnections().isEmpty())
+                    assertTrue(engine.isValidPermutation())
+                }
+            }
+        }
+    }
+
 }

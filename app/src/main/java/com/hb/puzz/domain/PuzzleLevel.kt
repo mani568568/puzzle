@@ -27,17 +27,18 @@ data class PuzzleLevel(
     fun acceptsBaseGridSize(size: Int): Boolean = randomGridSizes?.contains(size) ?: (size == gridSize)
 
     /**
-     * A saved/current session may temporarily use a Grid Shift up to two sizes above its base.
-     * This keeps the same Adventure/image while allowing a harder board such as 4×4 -> 5×5/6×6.
+     * A saved/current session may temporarily use a Grid Shift up to two sizes below its base.
+     * This keeps the same Adventure/image while making the puzzle easier with fewer, larger pieces
+     * such as 6×6 -> 5×5/4×4.
      */
     fun acceptsSessionGridSize(baseGridSize: Int, size: Int): Boolean =
         acceptsBaseGridSize(baseGridSize) &&
-            size in baseGridSize..minOf(baseGridSize + 2, MAX_GRID_SIZE)
+            size in maxOf(MIN_GRID_SIZE, baseGridSize - 2)..baseGridSize
 
     /** Broad route validation. The exact base/shift pairing is validated in GameSettings. */
     fun acceptsGridSize(size: Int): Boolean {
         val baseRange = randomGridSizes ?: (gridSize..gridSize)
-        return size in baseRange.first..minOf(baseRange.last + 2, MAX_GRID_SIZE)
+        return size in maxOf(MIN_GRID_SIZE, baseRange.first - 2)..baseRange.last
     }
 
     fun pickGridSize(random: Random = Random.Default): Int {
@@ -52,6 +53,7 @@ data class PuzzleLevel(
 
     companion object {
         /** Keep tiles comfortably touchable and within the reward/performance model. */
+        const val MIN_GRID_SIZE: Int = 2
         const val MAX_GRID_SIZE: Int = 8
 
         /**

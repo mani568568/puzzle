@@ -45,19 +45,22 @@ class PuzzleLevelTest {
         assertEquals("Hard · Master Quest", PuzzleLevel.Difficulty.HARD.displayLabel)
     }
     @Test
-    fun `grid shift allows at most two harder sizes and never beyond 8x8`() {
+    fun `grid shift allows at most two easier sizes and never below 2x2`() {
         val easy = PuzzleLevel.requireLevel(1)
-        assertTrue(easy.acceptsSessionGridSize(4, 5))
-        assertTrue(easy.acceptsSessionGridSize(4, 6))
-        assertTrue(!easy.acceptsSessionGridSize(4, 7))
+        assertTrue(easy.acceptsSessionGridSize(4, 3))
+        assertTrue(easy.acceptsSessionGridSize(4, 2))
+        assertTrue(!easy.acceptsSessionGridSize(4, 1))
+        assertTrue(!easy.acceptsSessionGridSize(4, 5))
 
         val six = PuzzleLevel.requireLevel(9)
-        assertTrue(six.acceptsSessionGridSize(6, 8))
-        assertTrue(!six.acceptsSessionGridSize(6, 9))
+        assertTrue(six.acceptsSessionGridSize(6, 5))
+        assertTrue(six.acceptsSessionGridSize(6, 4))
+        assertTrue(!six.acceptsSessionGridSize(6, 3))
 
         val max = PuzzleLevel.requireLevel(20)
-        assertTrue(max.acceptsSessionGridSize(8, 8))
-        assertTrue(!max.acceptsSessionGridSize(8, 9))
+        assertTrue(max.acceptsSessionGridSize(8, 7))
+        assertTrue(max.acceptsSessionGridSize(8, 6))
+        assertTrue(!max.acceptsSessionGridSize(8, 5))
     }
 
 }

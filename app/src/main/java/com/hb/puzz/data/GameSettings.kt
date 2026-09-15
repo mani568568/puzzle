@@ -63,11 +63,19 @@ data class HomeSnapshot(
     val history: List<AdventureHistoryEntry>
 )
 
-data class CompletionReceipt(val reward: CoinReward, val awarded: Int, val balance: Int)
+data class CompletionReceipt(
+    val reward: CoinReward,
+    val awarded: Int,
+    val balance: Int,
+    val hintAwarded: Int = 0,
+    val hintBalance: Int = 0
+)
 
 class GameSettings(context: Context) {
     companion object {
         const val INITIAL_CRYSTALS = 2
+        const val INITIAL_HINTS = 1
+        const val MAX_HINTS = 3
     }
 
     private val store = context.applicationContext.picturePuzzleDataStore
@@ -76,6 +84,7 @@ class GameSettings(context: Context) {
     private val highestKey = intPreferencesKey("highest_level")
     private val coinsKey = intPreferencesKey("coin_balance_v1")
     private val crystalsKey = intPreferencesKey("crystal_balance_v1")
+    private val hintsKey = intPreferencesKey("hint_balance_v1")
     private val soundKey = booleanPreferencesKey("sound_enabled")
     private val hapticsKey = booleanPreferencesKey("haptics_enabled")
     private val darkKey = booleanPreferencesKey("dark_theme")
@@ -103,6 +112,7 @@ class GameSettings(context: Context) {
     val highestLevelFlow = store.data.map { (it[highestKey] ?: 1).coerceIn(1, PuzzleLevel.maxLevelId) }
     val coinBalanceFlow = store.data.map { it[coinsKey] ?: 0 }
     val crystalBalanceFlow = store.data.map { (it[crystalsKey] ?: INITIAL_CRYSTALS).coerceAtLeast(0) }
+    val hintBalanceFlow = store.data.map { (it[hintsKey] ?: INITIAL_HINTS).coerceIn(0, MAX_HINTS) }
     val soundEnabledFlow = store.data.map { it[soundKey] ?: true }
     val hapticsEnabledFlow = store.data.map { it[hapticsKey] ?: true }
     val darkThemeFlow = store.data.map { it[darkKey] ?: false }
@@ -209,7 +219,13 @@ class GameSettings(context: Context) {
             val receiptKey = stringPreferencesKey("coin_receipt_${s.levelId}")
             val previous = p[receiptKey]?.let(::JSONObject)
             if (previous?.optString("session") == s.sessionId) {
-                receipt = CompletionReceipt(reward, previous.getInt("awarded"), p[coinsKey] ?: 0)
+                receipt = CompletionReceipt(
+                    reward = reward,
+                    awarded = previous.getInt("awarded"),
+                    balance = p[coinsKey] ?: 0,
+                    hintAwarded = previous.optInt("hintAwarded", 0),
+                    hintBalance = (p[hintsKey] ?: INITIAL_HINTS).coerceIn(0, MAX_HINTS)
+                )
                 if (decodeSession(p)?.sessionId == s.sessionId) p.remove(sessionKey)
                 return@edit
             }
@@ -219,7 +235,23 @@ class GameSettings(context: Context) {
             val balance = (p[coinsKey] ?: 0) + award
             p[bestKey] = maxOf(p[bestKey] ?: 0, reward.total)
             p[coinsKey] = balance
-            p[receiptKey] = JSONObject().put("session", s.sessionId).put("awarded", award).toString()
+
+            // Hint economy: a player starts the Journey with one Hint. Every Adventure
+            // completion at or below the grid's optimal/par move target earns +1 Hint,
+            // while the wallet remains capped at MAX_HINTS. The session receipt below keeps
+            // crash/retry handling idempotent so the same completion cannot pay twice.
+            val optimalMoves = CoinRewards.parMoves(s.gridSize)
+            val qualifiesForHint = s.moveCount in 1..optimalMoves
+            val currentHints = (p[hintsKey] ?: INITIAL_HINTS).coerceIn(0, MAX_HINTS)
+            val hintAward = if (qualifiesForHint && currentHints < MAX_HINTS) 1 else 0
+            val updatedHints = (currentHints + hintAward).coerceAtMost(MAX_HINTS)
+            if (hintAward > 0) p[hintsKey] = updatedHints
+
+            p[receiptKey] = JSONObject()
+                .put("session", s.sessionId)
+                .put("awarded", award)
+                .put("hintAwarded", hintAward)
+                .toString()
             p[completedKey] = (p[completedKey] ?: emptySet()) + s.levelId.toString()
             p[highestKey] = maxOf(p[highestKey] ?: 1, (s.levelId + 1).coerceAtMost(PuzzleLevel.maxLevelId))
 
@@ -252,14 +284,44 @@ class GameSettings(context: Context) {
             // Never clear an unrelated newer session.
             if (decodeSession(p)?.sessionId == s.sessionId) p.remove(sessionKey)
             removeLegacySession(p)
-            receipt = CompletionReceipt(reward, award, balance)
+            receipt = CompletionReceipt(
+                reward = reward,
+                awarded = award,
+                balance = balance,
+                hintAwarded = hintAward,
+                hintBalance = updatedHints
+            )
         }
         return checkNotNull(receipt)
     }
 
     /**
+     * Hints are a Journey resource. The player begins with one, each assisted step spends one,
+     * and optimal Adventure completions can replenish the wallet up to [MAX_HINTS].
+     */
+    suspend fun trySpendHint(): Boolean {
+        var spent = false
+        store.edit { p ->
+            val current = (p[hintsKey] ?: INITIAL_HINTS).coerceIn(0, MAX_HINTS)
+            if (current > 0) {
+                p[hintsKey] = current - 1
+                spent = true
+            }
+        }
+        return spent
+    }
+
+    /** Used only to undo a reserved Hint when no assisted move could actually be applied. */
+    suspend fun restoreReservedHint() {
+        store.edit { p ->
+            val current = (p[hintsKey] ?: INITIAL_HINTS).coerceIn(0, MAX_HINTS)
+            p[hintsKey] = (current + 1).coerceAtMost(MAX_HINTS)
+        }
+    }
+
+    /**
      * Crystals are a lifetime power wallet. A new player receives exactly two free Crystals.
-     * Journey reset intentionally does not replenish them. Only entering a harder Grid Shift spends one.
+     * Journey reset intentionally does not replenish them. Only entering an easier, reduced Grid Shift spends one.
      */
     suspend fun trySpendCrystal(): Boolean {
         var spent = false
@@ -291,11 +353,12 @@ class GameSettings(context: Context) {
             p.remove(completedKey)
             p.remove(highestKey)
             p.remove(sessionKey)
+            p[hintsKey] = INITIAL_HINTS
             p.asMap().keys.filter { it.name.startsWith("adventure_history_") }.forEach { p.remove(it) }
             removeLegacySession(p)
         }
     }
-    // Wallet and personal bests intentionally survive journey reset, preventing duplicate rewards.
+    // Coins, Crystals and personal bests survive Journey reset. Hint progress restarts at one because Hints are Journey-scoped.
     suspend fun loadPexelsPhoto(levelId: Int): PexelsPhotoMeta? {
         val p = store.data.first()
         fun value(suffix: String) = p[stringPreferencesKey("pexels_${levelId}_$suffix")]

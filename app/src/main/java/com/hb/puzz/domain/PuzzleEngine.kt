@@ -42,31 +42,44 @@ class PuzzleEngine(
     fun isSolved(): Boolean = positions.indices.all { positions[it] == it }
 
     /**
-     * Shuffles until the puzzle is unsolved and, when practical, avoids starting with
-     * too many already-connected neighbors. This keeps the opening state feeling random.
+     * Creates a fresh board with exactly zero correct neighbor connections.
+     *
+     * A plain random permutation can accidentally place matching source-image neighbors together,
+     * which made a brand-new Adventure open at a non-zero completion percentage. We instead
+     * independently scramble source rows and columns while rejecting any adjacent +1 step.
+     * That guarantees no horizontal or vertical pair starts in its correct image orientation.
      */
     fun shuffle() {
-        val maxStartingConnections = (getTotalPossibleConnections() / 6).coerceAtLeast(1)
-        var attempts = 0
+        val rowOrder = shuffledAxisWithoutForwardStep()
+        val colOrder = shuffledAxisWithoutForwardStep()
 
-        do {
-            for (i in totalTiles - 1 downTo 1) {
-                val j = random.nextInt(i + 1)
-                val temp = positions[i]
-                positions[i] = positions[j]
-                positions[j] = temp
+        for (row in 0 until gridSize) {
+            for (col in 0 until gridSize) {
+                val sourceRow = rowOrder[row]
+                val sourceCol = colOrder[col]
+                positions[row * gridSize + col] = sourceRow * gridSize + sourceCol
             }
-            attempts++
-        } while (
-            attempts < 24 &&
-            (isSolved() || getCorrectConnections().size > maxStartingConnections)
-        )
-
-        if (isSolved() && totalTiles > 1) {
-            val temp = positions[0]
-            positions[0] = positions[1]
-            positions[1] = temp
         }
+
+        check(!isSolved()) { "Fresh puzzle must not start solved" }
+        check(getCorrectConnections().isEmpty()) { "Fresh puzzle must start at zero completion" }
+    }
+
+    private fun shuffledAxisWithoutForwardStep(): IntArray {
+        repeat(64) {
+            val candidate = IntArray(gridSize) { it }
+            for (i in candidate.lastIndex downTo 1) {
+                val j = random.nextInt(i + 1)
+                val temp = candidate[i]
+                candidate[i] = candidate[j]
+                candidate[j] = temp
+            }
+            if ((0 until candidate.lastIndex).none { candidate[it + 1] - candidate[it] == 1 }) {
+                return candidate
+            }
+        }
+        // Always valid for gridSize >= 2 and still produces zero forward-oriented neighbors.
+        return IntArray(gridSize) { gridSize - 1 - it }
     }
 
     fun getTileAt(position: Int): Int =
@@ -259,6 +272,44 @@ class PuzzleEngine(
         if (!isValidPermutation(updated)) return false
         positions = updated
         return true
+    }
+
+
+    /**
+     * Moves exactly one current block/group into its solved absolute location.
+     * A connected group is treated as one puzzle block, so a hint never tears a merged
+     * shape apart. Repeated calls monotonically lock more tiles into their true positions.
+     * Returns the tile IDs moved by this assisted step, or an empty set when already solved.
+     */
+    fun applyHintStep(): Set<Int> {
+        if (isSolved()) return emptySet()
+
+        val seen = mutableSetOf<Int>()
+        val groups = mutableListOf<Set<Int>>()
+        for (tileId in 0 until totalTiles) {
+            if (tileId in seen) continue
+            val group = getGroupForTile(tileId)
+            seen.addAll(group)
+            groups += group
+        }
+
+        // Do not solve in board order. Each Hint chooses a random unsolved visual block/group,
+        // so repeated hints can jump naturally around the picture instead of progressing
+        // top-to-bottom or bottom-to-top. Connected pieces still move as one rigid block.
+        val candidates = groups
+            .filter { group -> group.any { tileId -> getPositionOf(tileId) != tileId } }
+            .shuffled(random)
+
+        for (group in candidates) {
+            val misplacedTiles = group
+                .filter { tileId -> getPositionOf(tileId) != tileId }
+                .shuffled(random)
+            val anchorTileId = misplacedTiles.firstOrNull() ?: continue
+            // Tile IDs are their solved board positions, so translating this randomly chosen
+            // block to its true offset creates the next assisted merge without a fixed direction.
+            if (attemptMoveGroup(anchorTileId, anchorTileId)) return group
+        }
+        return emptySet()
     }
 
     fun copy(): PuzzleEngine = PuzzleEngine(gridSize).also {

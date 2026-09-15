@@ -64,6 +64,7 @@ class PuzzleGameViewModel(
     private var loadJob: Job? = null
     private var celebrationJob: Job? = null
     private var gridShiftBusy = false
+    private var hintBusy = false
 
     init {
         load()
@@ -90,7 +91,23 @@ class PuzzleGameViewModel(
                 val saved = settings.loadSession()
                 if (saved?.levelId == levelId && saved.gridSize == engine.gridSize && engine.restorePositions(saved.positions)) {
                     session = saved
-                    clock.restore(saved.elapsedMillis)
+                    // Migrate pristine saves created by older shuffle logic. Those saves could
+                    // accidentally contain correct neighbors before the player made a move,
+                    // causing a new Adventure to open above 0% completion.
+                    if (!saved.started && saved.moveCount == 0 && engine.getCorrectConnections().isNotEmpty()) {
+                        engine.shuffle()
+                        session = saved.copy(
+                            positions = engine.getCurrentPositions(),
+                            moveCount = 0,
+                            elapsedMillis = 0,
+                            sessionId = UUID.randomUUID().toString(),
+                            started = false,
+                            speedEligible = true
+                        )
+                        clock.restore(0)
+                    } else {
+                        clock.restore(saved.elapsedMillis)
+                    }
                 }
                 val loaded = repository.loadLevelImage(PuzzleLevel.requireLevel(levelId), session.imageSource ?: preferredSource)
                 val identity = loaded.attribution?.id?.let { "pexels-$it" } ?: "bundled-$levelId"
@@ -100,13 +117,21 @@ class PuzzleGameViewModel(
                     return@launch
                 }
                 session = session.copy(imageSource = loaded.sourceMode, imageIdentity = identity)
+                val solvedOnLoad = engine.isSolved()
+                if (!solvedOnLoad) {
+                    // The timer starts automatically as soon as the Adventure is ready on screen.
+                    // There is no separate Start action; Pause/Resume is the only timer control.
+                    clock.resume()
+                    session = session.copy(started = true)
+                }
                 mutable.value = PicturePuzzleUiState(loading = false, image = loaded,
                     boardVersion = mutable.value.boardVersion + 1, moves = session.moveCount,
-                    elapsedMillis = session.elapsedMillis, started = session.started,
-                    solved = engine.isSolved(), connections = engine.getCorrectConnections().size,
+                    elapsedMillis = clock.elapsedMillis(), started = !solvedOnLoad,
+                    running = !solvedOnLoad,
+                    solved = solvedOnLoad, connections = engine.getCorrectConnections().size,
                     speedEligible = session.speedEligible, gridSize = engine.gridSize,
                     baseGridSize = session.baseGridSize)
-                if (engine.isSolved()) finish() else checkpoint()
+                if (solvedOnLoad) finish() else checkpoint()
             } catch (e: CancellationException) { throw e }
             catch (_: Exception) {
                 mutable.value = mutable.value.copy(loading = false, error = "We couldn’t open your puzzle. Please try again.")
@@ -189,6 +214,100 @@ class PuzzleGameViewModel(
         return if (solved) 2 else if (ids.isNotEmpty()) 1 else 0
     }
 
+
+    /**
+     * Reserves one Journey Hint, then applies exactly one assisted puzzle move.
+     * Hints never run while deliberately paused. A failed assisted move refunds the reservation.
+     * 0 = unavailable, 1 = step created a merge, 2 = puzzle completed, 3 = moved without a new merge.
+     */
+    fun hintStep(onResult: (Int) -> Unit = {}) {
+        val initial = mutable.value
+        if (
+            hintBusy || initial.loading || initial.error != null || initial.solved || initial.image == null ||
+            (initial.started && !initial.running)
+        ) {
+            onResult(0)
+            return
+        }
+
+        hintBusy = true
+        viewModelScope.launch {
+            var reserved = false
+            try {
+                if (!settings.trySpendHint()) {
+                    onResult(0)
+                    return@launch
+                }
+                reserved = true
+
+                val result = applyHintStepNow()
+                if (result == 0) {
+                    settings.restoreReservedHint()
+                    reserved = false
+                }
+                onResult(result)
+            } catch (e: CancellationException) {
+                if (reserved) withContext(NonCancellable) { settings.restoreReservedHint() }
+                throw e
+            } catch (_: Exception) {
+                if (reserved) withContext(NonCancellable) { settings.restoreReservedHint() }
+                onResult(0)
+            } finally {
+                hintBusy = false
+            }
+        }
+    }
+
+    private fun applyHintStepNow(): Int {
+        val current = mutable.value
+        if (current.loading || current.error != null || current.solved || current.image == null) return 0
+        if (current.started && !current.running) return 0
+
+        if (!current.started) {
+            clock.resume()
+            session = session.copy(started = true)
+            mutable.value = current.copy(started = true, running = true)
+        }
+
+        val before = engine.getCorrectConnections()
+        val movedTiles = engine.applyHintStep()
+        if (movedTiles.isEmpty()) return 0
+
+        val after = engine.getCorrectConnections()
+        val gained = after - before
+        val gainedIds = gained.flatMap { listOf(it.firstTileId, it.secondTileId) }.toSet()
+        val celebrating = if (gainedIds.isEmpty()) emptySet() else {
+            engine.getConnectedGroups()
+                .filter { group -> group.any { it in gainedIds } }
+                .flatten()
+                .toSet()
+        }
+        val solved = engine.isSolved()
+        if (solved) clock.pause()
+
+        mutable.value = mutable.value.copy(
+            moves = mutable.value.moves + 1,
+            elapsedMillis = clock.elapsedMillis(),
+            boardVersion = mutable.value.boardVersion + 1,
+            connections = after.size,
+            solved = solved,
+            running = !solved,
+            celebration = celebrating,
+            celebrationVersion = mutable.value.celebrationVersion + 1
+        )
+
+        celebrationJob?.cancel()
+        if (celebrating.isNotEmpty()) {
+            celebrationJob = viewModelScope.launch {
+                delay(MergeMotion.CLEAR_DELAY_MILLIS)
+                mutable.value = mutable.value.copy(celebration = emptySet())
+            }
+        }
+
+        if (solved) finish() else checkpoint()
+        return if (solved) 2 else if (gained.isNotEmpty()) 1 else 3
+    }
+
     private fun finish() {
         if (mutable.value.receipt != null) return
         clock.pause()
@@ -206,16 +325,18 @@ class PuzzleGameViewModel(
         celebrationJob?.cancel()
         clock.restore(0)
         engine.shuffle()
+        clock.resume()
         session = session.copy(sessionId = UUID.randomUUID().toString(), positions = engine.getCurrentPositions(),
-            moveCount = 0, elapsedMillis = 0, started = false, speedEligible = true)
+            moveCount = 0, elapsedMillis = 0, started = true, speedEligible = true)
         mutable.value = PicturePuzzleUiState(loading = false, image = mutable.value.image,
-            boardVersion = mutable.value.boardVersion + 1, connections = engine.getCorrectConnections().size,
+            boardVersion = mutable.value.boardVersion + 1, elapsedMillis = 0,
+            started = true, running = true, connections = engine.getCorrectConnections().size,
             gridSize = engine.gridSize, baseGridSize = session.baseGridSize)
         checkpoint()
     }
 
     /**
-     * First press moves the current Adventure to a randomly harder grid (+1 or +2).
+     * First press moves the current Adventure to a randomly easier grid (-1 or -2).
      * Pressing again restores the original grid. A grid change intentionally starts a fresh
      * arrangement because pieces from different grid sizes cannot be mapped safely.
      */
@@ -230,18 +351,19 @@ class PuzzleGameViewModel(
             return
         }
 
-        val highestShift = minOf(baseGrid + 2, PuzzleLevel.MAX_GRID_SIZE)
-        if (highestShift <= baseGrid) return
+        val lowestShift = maxOf(PuzzleLevel.MIN_GRID_SIZE, baseGrid - 2)
+        if (lowestShift >= baseGrid) return
 
         gridShiftBusy = true
         viewModelScope.launch {
             try {
-                // Charge exactly once before entering the harder board. If the wallet is empty,
+                // Charge exactly once before entering the easier board. If the wallet is empty,
                 // nothing about the current puzzle changes.
                 if (!settings.trySpendCrystal()) return@launch
                 val latest = mutable.value
                 if (latest.loading || latest.error != null || latest.solved || latest.image == null) return@launch
-                val targetGrid = kotlin.random.Random.nextInt(baseGrid + 1, highestShift + 1)
+                // Randomly reduce the grid by one or two levels, bounded by MIN_GRID_SIZE.
+                val targetGrid = kotlin.random.Random.nextInt(lowestShift, baseGrid)
                 applyGridSize(targetGrid, latest)
             } finally {
                 gridShiftBusy = false
@@ -256,13 +378,14 @@ class PuzzleGameViewModel(
 
         engine = PuzzleEngine(targetGrid)
         clock.restore(0)
+        clock.resume()
         session = session.copy(
             gridSize = targetGrid,
             positions = engine.getCurrentPositions(),
             moveCount = 0,
             elapsedMillis = 0,
             sessionId = UUID.randomUUID().toString(),
-            started = false,
+            started = true,
             speedEligible = true,
             baseGridSize = baseGrid
         )
@@ -270,6 +393,9 @@ class PuzzleGameViewModel(
             loading = false,
             image = current.image,
             boardVersion = current.boardVersion + 1,
+            elapsedMillis = 0,
+            started = true,
+            running = true,
             connections = engine.getCorrectConnections().size,
             gridSize = targetGrid,
             baseGridSize = baseGrid

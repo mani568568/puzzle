@@ -26,10 +26,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.contentDescription
@@ -74,6 +74,7 @@ fun PicturePuzzleGameScreen(
     val ui by vm.state.collectAsStateWithLifecycle()
     val wallet by settings.coinBalanceFlow.collectAsStateWithLifecycle(initialValue = 0)
     val crystals by settings.crystalBalanceFlow.collectAsStateWithLifecycle(initialValue = GameSettings.INITIAL_CRYSTALS)
+    val hints by settings.hintBalanceFlow.collectAsStateWithLifecycle(initialValue = GameSettings.INITIAL_HINTS)
     var confirmRestart by remember { mutableStateOf(false) }
     var rewardInfo by remember { mutableStateOf(false) }
     var crystalInfo by remember { mutableStateOf(false) }
@@ -88,7 +89,7 @@ fun PicturePuzzleGameScreen(
     val currentGridSize = ui.gridSize.takeIf { it >= 2 } ?: gridSize
     val baseGridSize = ui.baseGridSize.takeIf { it >= 2 } ?: gridSize
     val gridShifted = currentGridSize != baseGridSize
-    val canIncreaseGrid = baseGridSize < PuzzleLevel.MAX_GRID_SIZE
+    val canDecreaseGrid = baseGridSize > PuzzleLevel.MIN_GRID_SIZE
     val totalConnections = vm.engine.getTotalPossibleConnections()
     val progress = ui.connections.toFloat() / totalConnections
     val animatedProgress by animateFloatAsState(progress, tween(400), label = "connections")
@@ -110,7 +111,6 @@ fun PicturePuzzleGameScreen(
     val softPanel = Color(0xFFF8FCFF)
 
     BoxWithConstraints(modifier.fillMaxSize().background(pleasantSkyBlue).safeDrawingPadding()) {
-        val largeText = LocalDensity.current.fontScale > 1.3f
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 4.dp, vertical = 6.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -125,20 +125,25 @@ fun PicturePuzzleGameScreen(
                 ) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, "Save and go back")
                 }
-                CompactStatCard("TIME", formatPlayTime(ui.elapsedMillis), Modifier.weight(1f), softPanel)
-                CompactStatCard("MOVES", "${ui.moves}", Modifier.weight(1f), softPanel)
-                CompactStatCard("TARGET", "${CoinRewards.parMoves(currentGridSize)}", Modifier.weight(1f), softPanel)
+                CompactStatCard("TIME", formatPlayTime(ui.elapsedMillis), Modifier.weight(0.92f), softPanel)
+                CompactStatCard("MOVES", "${ui.moves}", Modifier.weight(0.92f), softPanel)
                 CompactWalletCard(
                     crystals = crystals,
                     coins = wallet,
-                    modifier = Modifier.weight(1.28f),
+                    modifier = Modifier.weight(1.56f),
                     background = softPanel,
                     onCrystalClick = { crystalInfo = true },
                     onCoinClick = { rewardInfo = true }
                 )
             }
+            // Keep the live puzzle at the exact source-image aspect ratio.
+            // Using a fixed/taller ratio stretches the bitmap slices and makes the outer
+            // corners and merged contours look misaligned with the artwork.
+            val puzzleAspectRatio = ui.image?.bitmap?.let { bitmap ->
+                if (bitmap.height > 0) bitmap.width.toFloat() / bitmap.height.toFloat() else 1f
+            } ?: 1f
             Surface(
-                Modifier.fillMaxWidth().aspectRatio(0.94f),
+                Modifier.fillMaxWidth().aspectRatio(puzzleAspectRatio),
                 shape = RoundedCornerShape(18.dp),
                 tonalElevation = 2.dp,
                 shadowElevation = 3.dp
@@ -171,51 +176,6 @@ fun PicturePuzzleGameScreen(
                     }
                 }
             }
-            FilledTonalButton(
-                onClick = {
-                    if (!gridShifted && canIncreaseGrid && crystals <= 0) crystalInfo = true
-                    else vm.toggleGridShift()
-                },
-                enabled = !ui.loading && !ui.solved && ui.image != null && (gridShifted || canIncreaseGrid),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 46.dp)
-                    .semantics {
-                        contentDescription = when {
-                            gridShifted -> "Restore the original puzzle grid for free"
-                            !canIncreaseGrid -> "Maximum puzzle grid reached"
-                            crystals > 0 -> "Spend one Crystal to randomly increase the puzzle grid by one or two levels"
-                            else -> "No Crystals remaining. Grid Shift is unavailable until more are purchased"
-                        }
-                    },
-                colors = ButtonDefaults.filledTonalButtonColors(
-                    containerColor = if (gridShifted) {
-                        MaterialTheme.colorScheme.tertiaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.secondaryContainer
-                    }
-                )
-            ) {
-                Icon(
-                    imageVector = when {
-                        gridShifted -> Icons.Default.Restore
-                        canIncreaseGrid -> Icons.Default.GridView
-                        else -> Icons.Default.CheckCircle
-                    },
-                    contentDescription = null,
-                    modifier = Modifier.size(19.dp)
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    text = when {
-                        gridShifted -> "Restore Grid · Free"
-                        !canIncreaseGrid -> "Max Grid"
-                        crystals > 0 -> "Grid Shift · 1 Crystal"
-                        else -> "No Crystals · Buy to Shift"
-                    },
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
             Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp),
                 color = softPanel) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
@@ -227,36 +187,89 @@ fun PicturePuzzleGameScreen(
                     LinearProgressIndicator(progress = { animatedProgress },
                         modifier = Modifier.fillMaxWidth().height(6.dp),
                         trackColor = Color.White)
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        OutlinedButton(
+
+                    // Four compact actions directly under the grid:
+                    // timer -> Crystal Grid Shift -> one-step Hint -> Restart.
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        PuzzleControlIcon(
+                            icon = if (ui.running) Icons.Default.Pause else Icons.Default.PlayArrow,
+                            label = if (ui.running) "Pause" else "Resume",
+                            contentDescription = if (ui.running)
+                                "Pause the puzzle timer"
+                            else
+                                "Resume the puzzle timer",
+                            enabled = !ui.loading && !ui.solved && ui.image != null,
                             onClick = { if (ui.running) vm.pause() else vm.resume() },
+                            modifier = Modifier.weight(1f)
+                        )
+                        PuzzleControlIcon(
+                            icon = when {
+                                gridShifted -> Icons.Default.Restore
+                                canDecreaseGrid -> Icons.Default.GridView
+                                else -> Icons.Default.CheckCircle
+                            },
+                            label = when {
+                                gridShifted -> "Restore"
+                                !canDecreaseGrid -> "Min Grid"
+                                else -> "Grid"
+                            },
+                            contentDescription = when {
+                                gridShifted -> "Restore the original puzzle grid for free"
+                                !canDecreaseGrid -> "Minimum puzzle grid reached"
+                                crystals > 0 -> "Spend one Crystal to reduce the grid and use fewer, larger pieces"
+                                else -> "No Crystals remaining. Grid Shift is unavailable"
+                            },
+                            enabled = !ui.loading && !ui.solved && ui.image != null && (gridShifted || canDecreaseGrid),
+                            onClick = {
+                                if (!gridShifted && canDecreaseGrid && crystals <= 0) crystalInfo = true
+                                else vm.toggleGridShift()
+                            },
+                            modifier = Modifier.weight(1f),
+                            containerColor = if (gridShifted) MaterialTheme.colorScheme.tertiaryContainer
+                                else MaterialTheme.colorScheme.secondaryContainer
+                        )
+                        PuzzleControlIcon(
+                            icon = Icons.Default.Lightbulb,
+                            label = "Hint",
+                            contentDescription = if (hints > 0)
+                                "Use one Hint to solve one random puzzle step. $hints remaining"
+                            else
+                                "No Hints remaining. Earn a Hint by completing an Adventure within optimal moves",
+                            enabled = hints > 0 && !ui.loading && !ui.solved && ui.image != null && (!ui.started || ui.running),
+                            badgeCount = hints,
+                            onClick = {
+                                vm.hintStep { result ->
+                                    when (result) {
+                                        1 -> {
+                                            if (soundEnabled) feedback.playConnectionSound()
+                                            if (hapticsEnabled) feedback.buzzForConnection()
+                                        }
+                                        2 -> {
+                                            if (soundEnabled) feedback.playSolvedSound()
+                                            if (hapticsEnabled) feedback.buzzForSolved()
+                                        }
+                                    }
+                                }
+                            },
+                            modifier = Modifier.weight(1f)
+                        )
+                        PuzzleControlIcon(
+                            icon = Icons.Default.Refresh,
+                            label = "Restart",
+                            contentDescription = "Restart this adventure",
                             enabled = !ui.loading && !ui.solved && ui.image != null,
-                            modifier = Modifier.weight(1f).heightIn(min = 48.dp)
-                        ) {
-                            if (!largeText) {
-                                Icon(if (ui.running) Icons.Default.Pause else Icons.Default.PlayArrow, null, Modifier.size(18.dp))
-                                Spacer(Modifier.width(6.dp))
-                            }
-                            Text(when {
-                                ui.running -> "Pause"
-                                ui.started -> "Resume"
-                                else -> "Start"
-                            })
-                        }
-                        OutlinedButton(onClick = { vm.pause(); confirmRestart = true },
-                            enabled = !ui.loading && !ui.solved && ui.image != null,
-                            modifier = Modifier.weight(1f).heightIn(min = 48.dp)) {
-                            if (!largeText) {
-                                Icon(Icons.Default.Refresh, null, Modifier.size(18.dp))
-                                Spacer(Modifier.width(6.dp))
-                            }
-                            Text("Restart")
-                        }
+                            onClick = { confirmRestart = true },
+                            modifier = Modifier.weight(1f)
+                        )
                     }
                 }
             }
             ui.image?.attribution?.let { credit ->
-                TextButton(onClick = { vm.pause(); runCatching { uri.openUri(credit.photoUrl) } }) {
+                TextButton(onClick = { runCatching { uri.openUri(credit.photoUrl) } }) {
                     Text("Photo: ${credit.photographer} · Pexels", maxLines = 1, overflow = TextOverflow.Ellipsis,
                         style = MaterialTheme.typography.labelSmall)
                 }
@@ -274,6 +287,8 @@ fun PicturePuzzleGameScreen(
         Column(Modifier.verticalScroll(rememberScrollState())) {
             RewardCard(ui.receipt!!.awarded, ui.receipt!!.reward.completion, ui.receipt!!.reward.speed,
                 ui.receipt!!.reward.efficiency, ui.elapsedMillis, ui.moves, ui.speedEligible,
+                hintAwarded = ui.receipt!!.hintAwarded,
+                hintBalance = ui.receipt!!.hintBalance,
                 completionTitle = when {
                     levelId % ADVENTURES_PER_MILESTONE == 0 -> milestoneTitle(levelId)
                     else -> "Adventure Complete!"
@@ -295,9 +310,9 @@ fun PicturePuzzleGameScreen(
         icon = { CrystalIcon(28.dp) },
         title = { Text(if (crystals > 0) "Crystal Power" else "No Crystals left") },
         text = { Text(if (crystals > 0)
-            "You have $crystals Crystal${if (crystals == 1) "" else "s"}. Grid Shift spends 1 Crystal to rebuild the current Adventure on a randomly harder grid, up to two grid levels higher. Restoring the original grid is free."
+            "You have $crystals Crystal${if (crystals == 1) "" else "s"}. Grid Shift spends 1 Crystal to rebuild the current Adventure on a randomly smaller grid, one or two levels lower. Fewer cells create larger pieces and make the puzzle easier. Restoring the original grid is free."
         else
-            "Your two free Journey Crystals have been used. Grid Shift cannot increase the grid until more Crystals are purchased. The wallet is ready for Google Play Billing to credit purchased Crystals.") },
+            "Your two free Journey Crystals have been used. Grid Shift cannot reduce the grid until more Crystals are purchased. The wallet is ready for Google Play Billing to credit purchased Crystals.") },
         confirmButton = { TextButton(onClick = { crystalInfo = false }) { Text("Got it") } })
 }
 
@@ -426,31 +441,63 @@ private fun CompactWalletCard(
 ) {
     Surface(modifier.heightIn(min = 48.dp), shape = RoundedCornerShape(14.dp), color = background) {
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 5.dp, vertical = 5.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceEvenly
+            Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
             Surface(
                 onClick = onCrystalClick,
                 color = Color.Transparent,
-                modifier = Modifier.semantics { contentDescription = "$crystals crystals. Grid Shift power" }
+                modifier = Modifier
+                    .weight(1f)
+                    .heightIn(min = 40.dp)
+                    .semantics { contentDescription = "$crystals crystals. Grid Shift power" }
             ) {
-                Row(Modifier.padding(horizontal = 3.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
-                    CrystalIcon(18.dp)
-                    Spacer(Modifier.width(3.dp))
-                    Text("$crystals", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, maxLines = 1)
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Row(
+                        Modifier.padding(horizontal = 5.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        CrystalIcon(20.dp)
+                        Spacer(Modifier.width(5.dp))
+                        Text(
+                            "$crystals",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.ExtraBold,
+                            maxLines = 1
+                        )
+                    }
                 }
             }
-            Text("·", color = MaterialTheme.colorScheme.outline)
+            Box(
+                Modifier
+                    .width(1.dp)
+                    .height(26.dp)
+                    .background(MaterialTheme.colorScheme.outlineVariant)
+            )
             Surface(
                 onClick = onCoinClick,
                 color = Color.Transparent,
-                modifier = Modifier.semantics { contentDescription = "$coins gold coins. Reward details" }
+                modifier = Modifier
+                    .weight(1f)
+                    .heightIn(min = 40.dp)
+                    .semantics { contentDescription = "$coins gold coins. Reward details" }
             ) {
-                Row(Modifier.padding(horizontal = 3.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
-                    GoldCoinIcon(Modifier.size(18.dp))
-                    Spacer(Modifier.width(3.dp))
-                    Text("$coins", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, maxLines = 1)
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Row(
+                        Modifier.padding(horizontal = 5.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        GoldCoinIcon(Modifier.size(20.dp))
+                        Spacer(Modifier.width(5.dp))
+                        Text(
+                            "$coins",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.ExtraBold,
+                            maxLines = 1
+                        )
+                    }
                 }
             }
         }
@@ -458,8 +505,57 @@ private fun CompactWalletCard(
 }
 
 @Composable
+private fun PuzzleControlIcon(
+    icon: ImageVector,
+    label: String,
+    contentDescription: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    containerColor: Color = MaterialTheme.colorScheme.surfaceVariant,
+    badgeCount: Int? = null
+) {
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        FilledTonalIconButton(
+            onClick = onClick,
+            enabled = enabled,
+            modifier = Modifier
+                .size(48.dp)
+                .semantics { this.contentDescription = contentDescription },
+            colors = IconButtonDefaults.filledTonalIconButtonColors(containerColor = containerColor)
+        ) {
+            if (badgeCount != null) {
+                BadgedBox(
+                    badge = {
+                        Badge {
+                            Text(badgeCount.coerceAtLeast(0).toString())
+                        }
+                    }
+                ) {
+                    Icon(icon, contentDescription = null, modifier = Modifier.size(23.dp))
+                }
+            } else {
+                Icon(icon, contentDescription = null, modifier = Modifier.size(23.dp))
+            }
+        }
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+@Composable
 private fun RewardCard(awarded: Int, base: Int, speed: Int, movesBonus: Int, elapsed: Long, moves: Int,
-    speedEligible: Boolean, completionTitle: String, nextLabel: String, onNext: () -> Unit) {
+    speedEligible: Boolean, hintAwarded: Int, hintBalance: Int,
+    completionTitle: String, nextLabel: String, onNext: () -> Unit) {
     var coinTarget by remember(awarded) { mutableIntStateOf(0) }
     LaunchedEffect(awarded) { coinTarget = awarded }
     val animatedCoins by animateIntAsState(coinTarget,
@@ -473,6 +569,16 @@ private fun RewardCard(awarded: Int, base: Int, speed: Int, movesBonus: Int, ela
                     color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.ExtraBold)
             }
             Text("${formatPlayTime(elapsed)} active time · $moves moves")
+            if (hintAwarded > 0) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Default.Lightbulb, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Text(
+                        "+$hintAwarded Hint · $hintBalance/${GameSettings.MAX_HINTS} available",
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
             Text("Completion $base  +  Speed $speed  +  Moves $movesBonus", style = MaterialTheme.typography.bodySmall)
             if (!speedEligible) Text("This older save has no reliable time record, so no speed bonus applies.", style = MaterialTheme.typography.bodySmall)
             if (awarded < base + speed + movesBonus) Text("Replay coins reflect the improvement over your best for this adventure.", style = MaterialTheme.typography.bodySmall)
