@@ -11,6 +11,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -28,6 +29,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -163,85 +165,93 @@ fun PicturePuzzleGameScreen(
             val puzzleAspectRatio = ui.image?.bitmap?.let { bitmap ->
                 if (bitmap.height > 0) bitmap.width.toFloat() / bitmap.height.toFloat() else 1f
             } ?: 1f
-            // Keep the frame OUTSIDE the artwork instead of painting a border on top of it.
-            // A 1dp frame avoids the previous overlap where the rounded stroke covered the
-            // image corners and merged-block outlines. The smaller radius keeps the board
-            // rectangular and puzzle-like instead of looking like an oval card.
+            // Keep the live puzzle framed while playing, but remove that outer board frame
+            // completely during the magical finished transformation so no extra oval/outline
+            // remains behind the final finished card.
             val puzzleFrameShape = RoundedCornerShape(7.dp)
             val puzzleContentShape = RoundedCornerShape(6.dp)
             val puzzleFrameColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.52f)
-            Surface(
-                Modifier.fillMaxWidth(),
-                shape = puzzleFrameShape,
-                color = puzzleFrameColor,
-                tonalElevation = 0.dp,
-                shadowElevation = 3.dp
-            ) {
-                Box(
-                    Modifier
-                        .padding(1.dp)
-                        .fillMaxWidth()
-                        .aspectRatio(puzzleAspectRatio)
-                        .clip(puzzleContentShape)
-                        .background(MaterialTheme.colorScheme.surface),
-                    contentAlignment = Alignment.Center
-                ) {
-                    when {
-                        ui.loading -> CircularProgressIndicator()
-                        ui.error != null -> Column(Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(ui.error!!)
-                            Button(onClick = vm::load) { Text("Try again") }
-                        }
-                        ui.image != null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            // Keep the final merged board visible while the finished card grows/fades in
-                            // over it. This makes completion feel like one continuous transformation.
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .graphicsLayer {
-                                        alpha = if (ui.solved) (1f - finishedReveal).coerceIn(0f, 1f) else 1f
-                                        val settle = if (ui.solved) finishedReveal else 0f
-                                        scaleX = 1f - (0.018f * settle)
-                                        scaleY = 1f - (0.018f * settle)
-                                    }
-                            ) {
-                                PuzzleBoard(
-                                    vm.engine,
-                                    ui.boardVersion,
-                                    ui.image!!.bitmap.asImageBitmap(),
-                                    // Do not draw the old contour/line animation around the fully
-                                    // completed picture. The solved celebration is handled by stars.
-                                    if (ui.solved) emptySet() else ui.celebration,
-                                    ui.celebrationVersion,
-                                    onGroupDropped = { anchor, target ->
-                                        when (vm.drop(anchor, target)) {
-                                            1 -> { if (soundEnabled) feedback.playConnectionSound(); if (hapticsEnabled) feedback.buzzForConnection() }
-                                            2 -> { if (soundEnabled) feedback.playSolvedSound(); if (hapticsEnabled) feedback.buzzForSolved() }
-                                        }
-                                    },
-                                    modifier = Modifier.fillMaxSize(),
-                                    inputEnabled = !ui.solved && (!ui.started || ui.running)
-                                )
-                                if (!ui.solved) {
-                                    MergePraiseOverlay(
-                                        mergeSize = ui.celebration.size,
-                                        celebrationVersion = ui.celebrationVersion,
-                                        solved = false,
-                                        modifier = Modifier.fillMaxSize()
-                                    )
+            val boardContent: @Composable BoxScope.() -> Unit = {
+                when {
+                    ui.loading -> CircularProgressIndicator()
+                    ui.error != null -> Column(Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(ui.error!!)
+                        Button(onClick = vm::load) { Text("Try again") }
+                    }
+                    ui.image != null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .graphicsLayer {
+                                    alpha = if (ui.solved) (1f - finishedReveal).coerceIn(0f, 1f) else 1f
+                                    val settle = if (ui.solved) finishedReveal else 0f
+                                    scaleX = 1f - (0.018f * settle)
+                                    scaleY = 1f - (0.018f * settle)
                                 }
-                            }
-
-                            if (ui.solved) {
-                                FinishedImageTransformation(
-                                    image = ui.image!!.bitmap.asImageBitmap(),
-                                    progress = finishedReveal,
-                                    celebrationProgress = celebrationBurst.value,
+                        ) {
+                            PuzzleBoard(
+                                vm.engine,
+                                ui.boardVersion,
+                                ui.image!!.bitmap.asImageBitmap(),
+                                if (ui.solved) emptySet() else ui.celebration,
+                                ui.celebrationVersion,
+                                onGroupDropped = { anchor, target ->
+                                    when (vm.drop(anchor, target)) {
+                                        1 -> { if (soundEnabled) feedback.playConnectionSound(); if (hapticsEnabled) feedback.buzzForConnection() }
+                                        2 -> { if (soundEnabled) feedback.playSolvedSound(); if (hapticsEnabled) feedback.buzzForSolved() }
+                                    }
+                                },
+                                modifier = Modifier.fillMaxSize(),
+                                inputEnabled = !ui.solved && (!ui.started || ui.running)
+                            )
+                            if (!ui.solved) {
+                                MergePraiseOverlay(
+                                    mergeSize = ui.celebration.size,
+                                    celebrationVersion = ui.celebrationVersion,
+                                    solved = false,
                                     modifier = Modifier.fillMaxSize()
                                 )
                             }
                         }
+
+                        if (ui.solved) {
+                            FinishedImageTransformation(
+                                image = ui.image!!.bitmap.asImageBitmap(),
+                                progress = finishedReveal,
+                                celebrationProgress = celebrationBurst.value,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
                     }
+                }
+            }
+
+            if (ui.solved) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(puzzleAspectRatio),
+                    contentAlignment = Alignment.Center,
+                    content = boardContent
+                )
+            } else {
+                Surface(
+                    Modifier.fillMaxWidth(),
+                    shape = puzzleFrameShape,
+                    color = puzzleFrameColor,
+                    tonalElevation = 0.dp,
+                    shadowElevation = 3.dp
+                ) {
+                    Box(
+                        Modifier
+                            .padding(1.dp)
+                            .fillMaxWidth()
+                            .aspectRatio(puzzleAspectRatio)
+                            .clip(puzzleContentShape)
+                            .background(MaterialTheme.colorScheme.surface),
+                        contentAlignment = Alignment.Center,
+                        content = boardContent
+                    )
                 }
             }
             Surface(
@@ -301,17 +311,25 @@ fun PicturePuzzleGameScreen(
                                     if (levelId == PuzzleLevel.maxLevelId) onHome()
                                     else onNextLevel(levelId + 1)
                                 },
-                                modifier = Modifier.fillMaxWidth().height(58.dp),
-                                shape = RoundedCornerShape(18.dp)
+                                modifier = Modifier
+                                    .fillMaxWidth(0.52f)
+                                    .height(50.dp),
+                                shape = RoundedCornerShape(20.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFFFFA800),
+                                    contentColor = Color.White
+                                ),
+                                elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp)
                             ) {
                                 Text(
-                                    if (levelId == PuzzleLevel.maxLevelId) "Journey Home" else "Level ${levelId + 1}",
+                                    if (levelId == PuzzleLevel.maxLevelId) "Home" else "Level ${levelId + 1}",
                                     style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.ExtraBold
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = Color.White
                                 )
                                 if (levelId != PuzzleLevel.maxLevelId) {
-                                    Spacer(Modifier.width(8.dp))
-                                    Icon(Icons.Default.ArrowForward, contentDescription = null)
+                                    Spacer(Modifier.width(6.dp))
+                                    Icon(Icons.Default.ArrowForward, contentDescription = null, tint = Color.White)
                                 }
                             }
                         } else if (!ui.saveError) {
@@ -692,10 +710,22 @@ private fun FinishedImageTransformation(
     modifier: Modifier = Modifier
 ) {
     val p = progress.coerceIn(0f, 1f)
+    val frameShape = RoundedCornerShape(14.dp)
+    val imageShape = RoundedCornerShape(10.dp)
+    val labelShape = RoundedCornerShape(10.dp)
+    val borderBrush = Brush.linearGradient(
+        colors = listOf(
+            Color(0xFFFF6B6B),
+            Color(0xFFFFC94A),
+            Color(0xFF44D1C4),
+            Color(0xFF6D8CFF),
+            Color(0xFFC77DFF),
+            Color(0xFFFF6B6B)
+        )
+    )
+
     Box(modifier, contentAlignment = Alignment.Center) {
-        // The frame softly materializes from the exact puzzle position. No outline is
-        // "drawn" around the image; the card itself fades/scales into place.
-        Surface(
+        Box(
             modifier = Modifier
                 .fillMaxWidth(0.88f)
                 .fillMaxHeight(0.94f)
@@ -708,21 +738,22 @@ private fun FinishedImageTransformation(
                     scaleX = overshoot
                     scaleY = overshoot
                     translationY = (1f - p) * 18f
-                },
-            shape = RoundedCornerShape(28.dp),
-            color = Color(0xFFFFFBF5),
-            shadowElevation = 8.dp,
-            tonalElevation = 0.dp
+                }
+                .border(width = 3.dp, brush = borderBrush, shape = frameShape)
+                .clip(frameShape)
+                .background(Color(0xFFFFFBF5))
         ) {
             Column(
-                modifier = Modifier.fillMaxSize().padding(start = 14.dp, end = 14.dp, top = 14.dp, bottom = 12.dp),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 10.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Box(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(20.dp))
+                        .clip(imageShape)
                         .background(Color.White),
                     contentAlignment = Alignment.Center
                 ) {
@@ -736,8 +767,8 @@ private fun FinishedImageTransformation(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(68.dp)
-                        .clip(RoundedCornerShape(18.dp))
+                        .height(62.dp)
+                        .clip(labelShape)
                         .background(Color(0xFFF7EEE2)),
                     contentAlignment = Alignment.Center
                 ) {
