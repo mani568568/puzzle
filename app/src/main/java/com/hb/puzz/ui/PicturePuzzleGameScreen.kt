@@ -3,6 +3,7 @@ package com.hb.puzz.ui
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.animateIntAsState
@@ -27,10 +28,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
@@ -41,7 +47,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.ViewModel
@@ -52,7 +57,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.hb.puzz.data.GameSettings
 import com.hb.puzz.data.images.ImageSourceMode
 import com.hb.puzz.data.images.PuzzleImageRepository
-import com.hb.puzz.domain.MergeMotion
 import com.hb.puzz.domain.CoinRewards
 import com.hb.puzz.domain.PuzzleLevel
 import com.hb.puzz.ui.feedback.PuzzleFeedbackPlayer
@@ -80,11 +84,6 @@ fun PicturePuzzleGameScreen(
     var confirmRestart by remember { mutableStateOf(false) }
     var rewardInfo by remember { mutableStateOf(false) }
     var crystalInfo by remember { mutableStateOf(false) }
-    var resultsVisible by remember { mutableStateOf(false) }
-    LaunchedEffect(ui.receipt) {
-        resultsVisible = false
-        if (ui.receipt != null) { delay(MergeMotion.RESULT_DELAY_MILLIS); resultsVisible = true }
-    }
     val context = LocalContext.current
     val feedback = remember { PuzzleFeedbackPlayer(context) }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -95,6 +94,26 @@ fun PicturePuzzleGameScreen(
     val totalConnections = vm.engine.getTotalPossibleConnections()
     val progress = ui.connections.toFloat() / totalConnections
     val animatedProgress by animateFloatAsState(progress, tween(400), label = "connections")
+    val finishedTarget = ui.solved && ui.image != null
+    val finishedReveal by animateFloatAsState(
+        targetValue = if (finishedTarget) 1f else 0f,
+        animationSpec = tween(900, easing = FastOutSlowInEasing),
+        label = "finished-reveal"
+    )
+    val finishedReady = finishedTarget && finishedReveal >= 0.92f
+    val celebrationBurst = remember(levelId) { Animatable(0f) }
+    LaunchedEffect(finishedTarget) {
+        if (finishedTarget) {
+            celebrationBurst.snapTo(0f)
+            delay(140)
+            celebrationBurst.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(1950, easing = LinearOutSlowInEasing)
+            )
+        } else {
+            celebrationBurst.snapTo(0f)
+        }
+    }
     val uri = LocalUriHandler.current
 
     DisposableEffect(lifecycle, vm) {
@@ -109,10 +128,10 @@ fun PicturePuzzleGameScreen(
     DisposableEffect(feedback) { onDispose { feedback.release() } }
     BackHandler { vm.saveAndLeave(onBack) }
 
-    val pleasantSkyBlue = Color(0xFFEAF7FF)
-    val softPanel = Color(0xFFF8FCFF)
+    val pleasantCream = Color(0xFFFFF7EA)
+    val softPanel = Color(0xFFFFFCF4)
 
-    BoxWithConstraints(modifier.fillMaxSize().background(pleasantSkyBlue).safeDrawingPadding()) {
+    BoxWithConstraints(modifier.fillMaxSize().background(pleasantCream).safeDrawingPadding()) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 4.dp, vertical = 6.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -173,120 +192,227 @@ fun PicturePuzzleGameScreen(
                             Text(ui.error!!)
                             Button(onClick = vm::load) { Text("Try again") }
                         }
-                        ui.solved && ui.celebration.isEmpty() && ui.image != null -> Image(
-                            ui.image!!.bitmap.asImageBitmap(),
-                            "Completed picture",
-                            Modifier.fillMaxSize(),
-                            contentScale = ContentScale.FillBounds
-                        )
                         ui.image != null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            PuzzleBoard(vm.engine, ui.boardVersion, ui.image!!.bitmap.asImageBitmap(),
-                                ui.celebration, ui.celebrationVersion,
-                                onGroupDropped = { anchor, target ->
-                                    when (vm.drop(anchor, target)) {
-                                        1 -> { if (soundEnabled) feedback.playConnectionSound(); if (hapticsEnabled) feedback.buzzForConnection() }
-                                        2 -> { if (soundEnabled) feedback.playSolvedSound(); if (hapticsEnabled) feedback.buzzForSolved() }
+                            // Keep the final merged board visible while the finished card grows/fades in
+                            // over it. This makes completion feel like one continuous transformation.
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .graphicsLayer {
+                                        alpha = if (ui.solved) (1f - finishedReveal).coerceIn(0f, 1f) else 1f
+                                        val settle = if (ui.solved) finishedReveal else 0f
+                                        scaleX = 1f - (0.018f * settle)
+                                        scaleY = 1f - (0.018f * settle)
                                     }
-                                }, modifier = Modifier.fillMaxSize(), inputEnabled = !ui.solved && (!ui.started || ui.running))
-                            MergePraiseOverlay(
-                                mergeSize = ui.celebration.size,
-                                celebrationVersion = ui.celebrationVersion,
-                                solved = ui.solved,
-                                modifier = Modifier.fillMaxSize()
-                            )
+                            ) {
+                                PuzzleBoard(
+                                    vm.engine,
+                                    ui.boardVersion,
+                                    ui.image!!.bitmap.asImageBitmap(),
+                                    // Do not draw the old contour/line animation around the fully
+                                    // completed picture. The solved celebration is handled by stars.
+                                    if (ui.solved) emptySet() else ui.celebration,
+                                    ui.celebrationVersion,
+                                    onGroupDropped = { anchor, target ->
+                                        when (vm.drop(anchor, target)) {
+                                            1 -> { if (soundEnabled) feedback.playConnectionSound(); if (hapticsEnabled) feedback.buzzForConnection() }
+                                            2 -> { if (soundEnabled) feedback.playSolvedSound(); if (hapticsEnabled) feedback.buzzForSolved() }
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxSize(),
+                                    inputEnabled = !ui.solved && (!ui.started || ui.running)
+                                )
+                                if (!ui.solved) {
+                                    MergePraiseOverlay(
+                                        mergeSize = ui.celebration.size,
+                                        celebrationVersion = ui.celebrationVersion,
+                                        solved = false,
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                }
+                            }
+
+                            if (ui.solved) {
+                                FinishedImageTransformation(
+                                    image = ui.image!!.bitmap.asImageBitmap(),
+                                    progress = finishedReveal,
+                                    celebrationProgress = celebrationBurst.value,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            }
                         }
                     }
                 }
             }
-            Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp),
-                color = softPanel) {
-                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("Completion", style = MaterialTheme.typography.labelLarge)
-                        Text("${(progress * 100).toInt()}%", style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-                    }
-                    LinearProgressIndicator(progress = { animatedProgress },
-                        modifier = Modifier.fillMaxWidth().height(6.dp),
-                        trackColor = Color.White)
-
-                    // Four compact actions directly under the grid:
-                    // timer -> Crystal Grid Shift -> one-step Hint -> Restart.
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        verticalAlignment = Alignment.Top
+            Surface(
+                Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                color = softPanel
+            ) {
+                if (ui.solved) {
+                    Column(
+                        Modifier.padding(14.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        PuzzleControlIcon(
-                            icon = if (ui.running) Icons.Default.Pause else Icons.Default.PlayArrow,
-                            label = if (ui.running) "Pause" else "Resume",
-                            contentDescription = if (ui.running)
-                                "Pause the puzzle timer"
-                            else
-                                "Resume the puzzle timer",
-                            enabled = !ui.loading && !ui.solved && ui.image != null,
-                            onClick = { if (ui.running) vm.pause() else vm.resume() },
-                            modifier = Modifier.weight(1f)
+                        if (!finishedReady) {
+                            Text(
+                                "Finishing your picture…",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        } else {
+                            Text(
+                                "Adventure Finished!",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+
+                        if (ui.receipt != null) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                GoldCoinIcon(Modifier.size(24.dp))
+                                Text(
+                                    "+${ui.receipt!!.awarded} coins",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    "· ${formatPlayTime(ui.elapsedMillis)} · ${ui.moves} moves",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            if (ui.receipt!!.hintAwarded > 0) {
+                                Text(
+                                    "+${ui.receipt!!.hintAwarded} Hint · ${ui.receipt!!.hintBalance}/${GameSettings.MAX_HINTS} available",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            Button(
+                                onClick = {
+                                    if (levelId == PuzzleLevel.maxLevelId) onHome()
+                                    else onNextLevel(levelId + 1)
+                                },
+                                modifier = Modifier.fillMaxWidth().height(58.dp),
+                                shape = RoundedCornerShape(18.dp)
+                            ) {
+                                Text(
+                                    if (levelId == PuzzleLevel.maxLevelId) "Journey Home" else "Level ${levelId + 1}",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.ExtraBold
+                                )
+                                if (levelId != PuzzleLevel.maxLevelId) {
+                                    Spacer(Modifier.width(8.dp))
+                                    Icon(Icons.Default.ArrowForward, contentDescription = null)
+                                }
+                            }
+                        } else if (!ui.saveError) {
+                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                            Text(
+                                "Saving your rewards…",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                } else {
+                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("Completion", style = MaterialTheme.typography.labelLarge)
+                            Text(
+                                "${(progress * 100).toInt()}%",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        LinearProgressIndicator(
+                            progress = { animatedProgress },
+                            modifier = Modifier.fillMaxWidth().height(6.dp),
+                            trackColor = Color.White
                         )
-                        PuzzleControlIcon(
-                            icon = when {
-                                gridShifted -> Icons.Default.Restore
-                                canDecreaseGrid -> Icons.Default.GridView
-                                else -> Icons.Default.CheckCircle
-                            },
-                            label = when {
-                                gridShifted -> "Restore"
-                                !canDecreaseGrid -> "Min Grid"
-                                else -> "Grid"
-                            },
-                            contentDescription = when {
-                                gridShifted -> "Restore the original puzzle grid for free"
-                                !canDecreaseGrid -> "Minimum puzzle grid reached"
-                                crystals > 0 -> "Spend one Crystal to reduce the grid and use fewer, larger pieces"
-                                else -> "No Crystals remaining. Grid Shift is unavailable"
-                            },
-                            enabled = !ui.loading && !ui.solved && ui.image != null && (gridShifted || canDecreaseGrid),
-                            onClick = {
-                                if (!gridShifted && canDecreaseGrid && crystals <= 0) crystalInfo = true
-                                else vm.toggleGridShift()
-                            },
-                            modifier = Modifier.weight(1f),
-                            containerColor = if (gridShifted) MaterialTheme.colorScheme.tertiaryContainer
-                                else MaterialTheme.colorScheme.secondaryContainer
-                        )
-                        PuzzleControlIcon(
-                            icon = Icons.Default.Lightbulb,
-                            label = "Hint",
-                            contentDescription = if (hints > 0)
-                                "Use one Hint to solve one random puzzle step. $hints remaining"
-                            else
-                                "No Hints remaining. Earn a Hint by completing an Adventure within optimal moves",
-                            enabled = hints > 0 && !ui.loading && !ui.solved && ui.image != null && (!ui.started || ui.running),
-                            badgeCount = hints,
-                            onClick = {
-                                vm.hintStep { result ->
-                                    when (result) {
-                                        1 -> {
-                                            if (soundEnabled) feedback.playConnectionSound()
-                                            if (hapticsEnabled) feedback.buzzForConnection()
-                                        }
-                                        2 -> {
-                                            if (soundEnabled) feedback.playSolvedSound()
-                                            if (hapticsEnabled) feedback.buzzForSolved()
+
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.Top
+                        ) {
+                            PuzzleControlIcon(
+                                icon = if (ui.running) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                label = if (ui.running) "Pause" else "Resume",
+                                contentDescription = if (ui.running) "Pause the puzzle timer" else "Resume the puzzle timer",
+                                enabled = !ui.loading && ui.image != null,
+                                onClick = { if (ui.running) vm.pause() else vm.resume() },
+                                modifier = Modifier.weight(1f)
+                            )
+                            PuzzleControlIcon(
+                                icon = when {
+                                    gridShifted -> Icons.Default.Restore
+                                    canDecreaseGrid -> Icons.Default.GridView
+                                    else -> Icons.Default.CheckCircle
+                                },
+                                label = when {
+                                    gridShifted -> "Restore"
+                                    !canDecreaseGrid -> "Min Grid"
+                                    else -> "Grid"
+                                },
+                                contentDescription = when {
+                                    gridShifted -> "Restore the original puzzle grid for free"
+                                    !canDecreaseGrid -> "Minimum puzzle grid reached"
+                                    crystals > 0 -> "Spend one Crystal to reduce the grid and use fewer, larger pieces"
+                                    else -> "No Crystals remaining. Grid Shift is unavailable"
+                                },
+                                enabled = !ui.loading && ui.image != null && (gridShifted || canDecreaseGrid),
+                                onClick = {
+                                    if (!gridShifted && canDecreaseGrid && crystals <= 0) crystalInfo = true
+                                    else vm.toggleGridShift()
+                                },
+                                modifier = Modifier.weight(1f),
+                                containerColor = if (gridShifted) MaterialTheme.colorScheme.tertiaryContainer
+                                    else MaterialTheme.colorScheme.secondaryContainer
+                            )
+                            PuzzleControlIcon(
+                                icon = Icons.Default.Lightbulb,
+                                label = "Hint",
+                                contentDescription = if (hints > 0)
+                                    "Use one Hint to solve one random puzzle step. $hints remaining"
+                                else
+                                    "No Hints remaining. Earn a Hint by completing an Adventure within optimal moves",
+                                enabled = hints > 0 && !ui.loading && ui.image != null && (!ui.started || ui.running),
+                                badgeCount = hints,
+                                onClick = {
+                                    vm.hintStep { result ->
+                                        when (result) {
+                                            1 -> {
+                                                if (soundEnabled) feedback.playConnectionSound()
+                                                if (hapticsEnabled) feedback.buzzForConnection()
+                                            }
+                                            2 -> {
+                                                if (soundEnabled) feedback.playSolvedSound()
+                                                if (hapticsEnabled) feedback.buzzForSolved()
+                                            }
                                         }
                                     }
-                                }
-                            },
-                            modifier = Modifier.weight(1f)
-                        )
-                        PuzzleControlIcon(
-                            icon = Icons.Default.Refresh,
-                            label = "Restart",
-                            contentDescription = "Restart this adventure",
-                            enabled = !ui.loading && !ui.solved && ui.image != null,
-                            onClick = { confirmRestart = true },
-                            modifier = Modifier.weight(1f)
-                        )
+                                },
+                                modifier = Modifier.weight(1f)
+                            )
+                            PuzzleControlIcon(
+                                icon = Icons.Default.Refresh,
+                                label = "Restart",
+                                contentDescription = "Restart this adventure",
+                                enabled = !ui.loading && ui.image != null,
+                                onClick = { confirmRestart = true },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
                     }
                 }
             }
@@ -300,23 +426,7 @@ fun PicturePuzzleGameScreen(
                 Text("Progress hasn’t been saved yet. Please retry before leaving.", color = MaterialTheme.colorScheme.error)
                 OutlinedButton(onClick = vm::retrySave) { Text("Retry save") }
             }
-            if (ui.solved && ui.receipt == null && !ui.saveError) Text("Saving your coins…")
-            if (ui.receipt != null) Button(onClick = { resultsVisible = true }) { Text("View earned coins") }
             Spacer(Modifier.height(8.dp))
-        }
-    }
-    if (resultsVisible && ui.receipt != null) Dialog(onDismissRequest = { resultsVisible = false }) {
-        Column(Modifier.verticalScroll(rememberScrollState())) {
-            RewardCard(ui.receipt!!.awarded, ui.receipt!!.reward.completion, ui.receipt!!.reward.speed,
-                ui.receipt!!.reward.efficiency, ui.elapsedMillis, ui.moves, ui.speedEligible,
-                hintAwarded = ui.receipt!!.hintAwarded,
-                hintBalance = ui.receipt!!.hintBalance,
-                completionTitle = when {
-                    levelId % ADVENTURES_PER_MILESTONE == 0 -> milestoneTitle(levelId)
-                    else -> "Adventure Complete!"
-                },
-                nextLabel = if (levelId == PuzzleLevel.maxLevelId) "Finish Journey" else "Next Adventure",
-                onNext = { if (levelId == PuzzleLevel.maxLevelId) onHome() else onNextLevel(levelId + 1) })
         }
     }
     if (confirmRestart) AlertDialog(onDismissRequest = { confirmRestart = false },
@@ -575,36 +685,218 @@ private fun PuzzleControlIcon(
 }
 
 @Composable
-private fun RewardCard(awarded: Int, base: Int, speed: Int, movesBonus: Int, elapsed: Long, moves: Int,
-    speedEligible: Boolean, hintAwarded: Int, hintBalance: Int,
-    completionTitle: String, nextLabel: String, onNext: () -> Unit) {
-    var coinTarget by remember(awarded) { mutableIntStateOf(0) }
-    LaunchedEffect(awarded) { coinTarget = awarded }
-    val animatedCoins by animateIntAsState(coinTarget,
-        animationSpec = androidx.compose.animation.core.tween(750), label = "earned-coins")
-    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
-        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text(completionTitle, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                GoldCoinIcon(Modifier.size(32.dp))
-                Text("+$animatedCoins coins", style = MaterialTheme.typography.headlineMedium,
-                    color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.ExtraBold)
-            }
-            Text("${formatPlayTime(elapsed)} active time · $moves moves")
-            if (hintAwarded > 0) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Icon(Icons.Default.Lightbulb, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+private fun FinishedImageTransformation(
+    image: androidx.compose.ui.graphics.ImageBitmap,
+    progress: Float,
+    celebrationProgress: Float,
+    modifier: Modifier = Modifier
+) {
+    val p = progress.coerceIn(0f, 1f)
+    Box(modifier, contentAlignment = Alignment.Center) {
+        // The frame softly materializes from the exact puzzle position. No outline is
+        // "drawn" around the image; the card itself fades/scales into place.
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth(0.88f)
+                .fillMaxHeight(0.94f)
+                .graphicsLayer {
+                    alpha = p
+                    val overshoot = when {
+                        p < 0.72f -> 0.95f + (p / 0.72f) * 0.065f
+                        else -> 1.015f - ((p - 0.72f) / 0.28f) * 0.015f
+                    }
+                    scaleX = overshoot
+                    scaleY = overshoot
+                    translationY = (1f - p) * 18f
+                },
+            shape = RoundedCornerShape(28.dp),
+            color = Color(0xFFFFFBF5),
+            shadowElevation = 8.dp,
+            tonalElevation = 0.dp
+        ) {
+            Column(
+                modifier = Modifier.fillMaxSize().padding(start = 14.dp, end = 14.dp, top = 14.dp, bottom = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(Color.White),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Image(
+                        bitmap = image,
+                        contentDescription = "Finished picture",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(68.dp)
+                        .clip(RoundedCornerShape(18.dp))
+                        .background(Color(0xFFF7EEE2)),
+                    contentAlignment = Alignment.Center
+                ) {
                     Text(
-                        "+$hintAwarded Hint · $hintBalance/${GameSettings.MAX_HINTS} available",
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
+                        text = "FINISHED!",
+                        modifier = Modifier.graphicsLayer {
+                            val textProgress = ((p - 0.42f) / 0.58f).coerceIn(0f, 1f)
+                            alpha = textProgress
+                            scaleX = 0.88f + 0.12f * textProgress
+                            scaleY = 0.88f + 0.12f * textProgress
+                        },
+                        textAlign = TextAlign.Center,
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Black,
+                        color = Color(0xFFC78F88),
+                        letterSpacing = 1.sp
                     )
                 }
             }
-            Text("Completion $base  +  Speed $speed  +  Moves $movesBonus", style = MaterialTheme.typography.bodySmall)
-            if (!speedEligible) Text("This older save has no reliable time record, so no speed bonus applies.", style = MaterialTheme.typography.bodySmall)
-            if (awarded < base + speed + movesBonus) Text("Replay coins reflect the improvement over your best for this adventure.", style = MaterialTheme.typography.bodySmall)
-            Button(onClick = onNext, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(nextLabel) }
+        }
+
+        FinishedSparkleBurst(progress = celebrationProgress, modifier = Modifier.fillMaxSize())
+    }
+}
+
+@Composable
+private fun FinishedSparkleBurst(
+    progress: Float,
+    modifier: Modifier = Modifier
+) {
+    Canvas(modifier) {
+        val t = progress.coerceIn(0f, 1f)
+        if (t <= 0.001f || t >= 0.999f) return@Canvas
+
+        val densityScale = density
+        val frameLeft = size.width * 0.08f
+        val frameTop = size.height * 0.04f
+        val frameRight = size.width * 0.92f
+        val frameBottom = size.height * 0.95f
+
+        // Strong opening pop, then a slower fall so the celebration remains visible.
+        val pop = (t / 0.20f).coerceIn(0f, 1f)
+        val fade = if (t < 0.72f) 1f else (1f - ((t - 0.72f) / 0.28f)).coerceIn(0f, 1f)
+        val visibleAlpha = pop * fade
+
+        val palette = listOf(
+            Color(0xFFFF5F6D), // coral
+            Color(0xFFFFC83D), // yellow
+            Color(0xFF41C7B7), // teal
+            Color(0xFF5C7CFA), // blue
+            Color(0xFFC86BFA), // purple
+            Color(0xFF74D14C), // green
+            Color(0xFFFF8FC7), // pink
+            Color(0xFFFF8A3D)  // orange
+        )
+
+        // Big curled ribbons launched from both sides/top of the finished frame.
+        val ribbonOrigins = listOf(
+            Offset(frameLeft + 10f * densityScale, frameTop + 12f * densityScale),
+            Offset(frameRight - 10f * densityScale, frameTop + 12f * densityScale),
+            Offset(size.width * 0.33f, frameTop + 4f * densityScale),
+            Offset(size.width * 0.67f, frameTop + 4f * densityScale)
+        )
+        ribbonOrigins.forEachIndexed { index, origin ->
+            val side = if (index % 2 == 0) -1f else 1f
+            val travel = (78f + index * 15f) * densityScale * t
+            val wave = (28f + index * 4f) * densityScale
+            val path = Path().apply {
+                moveTo(origin.x, origin.y)
+                cubicTo(
+                    origin.x + side * wave,
+                    origin.y + travel * 0.26f,
+                    origin.x - side * wave * 0.80f,
+                    origin.y + travel * 0.58f,
+                    origin.x + side * wave * 0.38f,
+                    origin.y + travel
+                )
+            }
+            val ribbonColor = palette[index % palette.size]
+            drawPath(
+                path = path,
+                color = ribbonColor.copy(alpha = visibleAlpha * 0.95f),
+                style = Stroke(width = 5.0f * densityScale)
+            )
+            drawPath(
+                path = path,
+                color = Color.White.copy(alpha = visibleAlpha * 0.24f),
+                style = Stroke(width = 1.3f * densityScale)
+            )
+        }
+
+        // Large colorful paper pieces. Their starting points hug the frame, then burst
+        // outward and fall with gravity. All values are deterministic so recomposition
+        // produces a stable, fluid animation instead of flicker.
+        repeat(54) { index ->
+            val sideGroup = index % 4
+            val fraction = ((index * 37) % 101) / 100f
+            val start = when (sideGroup) {
+                0 -> Offset(frameLeft, frameTop + (frameBottom - frameTop) * fraction)
+                1 -> Offset(frameRight, frameTop + (frameBottom - frameTop) * fraction)
+                2 -> Offset(frameLeft + (frameRight - frameLeft) * fraction, frameTop)
+                else -> Offset(frameLeft + (frameRight - frameLeft) * fraction, frameBottom)
+            }
+
+            val horizontalSign = when (sideGroup) {
+                0 -> -1f
+                1 -> 1f
+                else -> if (index % 2 == 0) -1f else 1f
+            }
+            val vx = horizontalSign * (28f + (index % 7) * 9f) * densityScale
+            val initialVy = when (sideGroup) {
+                2 -> -(50f + (index % 5) * 10f) * densityScale
+                3 -> -(34f + (index % 4) * 8f) * densityScale
+                else -> -(22f + (index % 6) * 7f) * densityScale
+            }
+            val gravity = (105f + (index % 5) * 11f) * densityScale
+            val x = start.x + vx * t
+            val y = start.y + initialVy * t + 0.5f * gravity * t * t
+
+            val paperWidth = (5.5f + (index % 4) * 1.6f) * densityScale
+            val paperHeight = (9.0f + (index % 3) * 2.8f) * densityScale
+            val rotation = (index * 29f + t * (290f + (index % 5) * 35f)) % 360f
+            val pieceAlpha = visibleAlpha * (0.78f + (index % 3) * 0.10f)
+            val color = palette[index % palette.size].copy(alpha = pieceAlpha.coerceIn(0f, 1f))
+
+            rotate(rotation, pivot = Offset(x, y)) {
+                drawRoundRect(
+                    color = color,
+                    topLeft = Offset(x - paperWidth / 2f, y - paperHeight / 2f),
+                    size = Size(paperWidth, paperHeight),
+                    cornerRadius = CornerRadius(1.7f * densityScale, 1.7f * densityScale)
+                )
+                drawLine(
+                    color = Color.White.copy(alpha = pieceAlpha * 0.28f),
+                    start = Offset(x - paperWidth * 0.28f, y - paperHeight * 0.30f),
+                    end = Offset(x + paperWidth * 0.25f, y + paperHeight * 0.26f),
+                    strokeWidth = (0.8f * densityScale).coerceAtLeast(1f)
+                )
+            }
+        }
+
+        // A handful of bright star flashes make the frame feel magical without relying
+        // on border drawing.
+        val starPoints = listOf(
+            Offset(frameLeft + 12f * densityScale, frameTop + 12f * densityScale),
+            Offset(frameRight - 14f * densityScale, frameTop + 20f * densityScale),
+            Offset(frameLeft + 8f * densityScale, size.height * 0.52f),
+            Offset(frameRight - 8f * densityScale, size.height * 0.48f),
+            Offset(size.width * 0.28f, frameBottom - 9f * densityScale),
+            Offset(size.width * 0.72f, frameBottom - 9f * densityScale)
+        )
+        starPoints.forEachIndexed { index, point ->
+            val phase = ((t * 4.5f) + index * 0.18f) % 1f
+            val twinkle = kotlin.math.sin((phase * Math.PI).toFloat()).coerceAtLeast(0f) * fade
+            val radius = (3.0f + (index % 3) * 0.7f) * densityScale
+            val c = if (index % 2 == 0) Color(0xFFFFE277) else Color.White
+            drawCircle(c.copy(alpha = twinkle * 0.30f), radius = radius * 2.4f, center = point)
+            drawLine(c.copy(alpha = twinkle), Offset(point.x - radius * 2.2f, point.y), Offset(point.x + radius * 2.2f, point.y), strokeWidth = 1.5f * densityScale)
+            drawLine(c.copy(alpha = twinkle), Offset(point.x, point.y - radius * 2.2f), Offset(point.x, point.y + radius * 2.2f), strokeWidth = 1.5f * densityScale)
         }
     }
 }

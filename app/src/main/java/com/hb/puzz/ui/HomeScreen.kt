@@ -1,17 +1,8 @@
 package com.hb.puzz.ui
 
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.layout.safeDrawingPadding
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.Box
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
-import com.hb.puzz.ui.images.ImageAssets
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -19,18 +10,24 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -46,9 +43,19 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.hb.puzz.data.images.ImageSourceMode
+
+private val HomeCream = Color(0xFFFFF7EA)
+private val HomePanel = Color(0xFFFFFCF4)
+private val HomeAccent = Color(0xFFB86A3B)
+private val HomeAccentSoft = Color(0xFFF4E1C9)
+private val HomeAccentDeep = Color(0xFF8D4F23)
 
 @Composable
 fun HomeScreen(
@@ -68,81 +75,144 @@ fun HomeScreen(
     onSettings: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val milestoneCount = completedCount / 4
-    Column(
-        modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)
-            .safeDrawingPadding().verticalScroll(rememberScrollState()).padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+    val primaryAction = if (hasSavedGame) onContinue else onStartJourney
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(HomeCream)
+            .safeDrawingPadding()
     ) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween) {
-            Text("ADVENTURE JOURNEY", style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp, vertical = 18.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(18.dp)
+        ) {
+            Box(modifier = Modifier.fillMaxWidth()) {
+                PlayInBlockBrand(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 42.dp)
+                )
+                IconButton(
+                    onClick = onSettings,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .background(HomePanel, CircleShape)
+                        .size(46.dp)
+                ) {
+                    Icon(Icons.Default.Settings, contentDescription = "Settings", tint = HomeAccent)
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center
+            ) {
                 CrystalPill(crystalBalance, onClick = onHowToPlay)
+                Spacer(Modifier.width(10.dp))
                 CoinPill(coinBalance, onClick = onHowToPlay)
             }
-        }
-        Text(if (journeyComplete) "A beautiful journey." else "A little focus.\nA beautiful picture.",
-            modifier = Modifier.fillMaxWidth(), style = MaterialTheme.typography.headlineLarge,
-            fontWeight = FontWeight.Bold)
-        Text("$completedCount of 20 Adventures completed", modifier = Modifier.fillMaxWidth(),
-            color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Card(Modifier.fillMaxWidth(), shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp)) {
-            Image(painterResource(ImageAssets.getLevelImage(currentChapter)), "Adventure artwork",
-                Modifier.fillMaxWidth().aspectRatio(1.5f), contentScale = ContentScale.Crop)
-            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(if (journeyComplete) "JOURNEY COMPLETE" else "ADVENTURE $currentChapter",
-                    style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-                Text(currentChapterTitle, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                Text(currentGridDescription, style = MaterialTheme.typography.bodyMedium)
-                Text(currentDifficulty, style = MaterialTheme.typography.bodySmall)
-            }
-        }
-        Button(onClick = if (hasSavedGame) onContinue else onStartJourney,
-            modifier = Modifier.fillMaxWidth().height(56.dp), shape = CircleShape) {
-            Text(if (hasSavedGame) "Continue Adventure" else if (journeyComplete) "Replay final Adventure" else "Start Adventure")
+
+            Spacer(Modifier.height(74.dp))
+
+            CurrentLevelButtonCard(
+                currentChapter = currentChapter,
+                onClick = primaryAction
+            )
+
         }
 
-        Card(
+        FloatingActionButton(
             onClick = onJourneyHistory,
-            modifier = Modifier.fillMaxWidth(),
-            shape = androidx.compose.foundation.shape.RoundedCornerShape(22.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f))
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(20.dp),
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    modifier = Modifier.size(46.dp).background(
-                        MaterialTheme.colorScheme.tertiaryContainer,
-                        CircleShape
-                    ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(Icons.Default.Star, contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onTertiaryContainer)
-                }
-                Column(Modifier.weight(1f).padding(horizontal = 14.dp)) {
-                    Text("Journey Journal", style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold)
-                    Text(
-                        "$completedCount Adventures · $milestoneCount Milestones · View your history & stats",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Icon(Icons.Default.ChevronRight, contentDescription = "Open Journey Journal")
-            }
+            Icon(Icons.Default.History, contentDescription = "Journey History")
         }
+    }
+}
 
-        Text("Complete Adventures. Reach Milestones. Build your journey.", style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-            TextButton(onClick = onHowToPlay) { Text("How to play") }
-            TextButton(onClick = onSettings) { Text("Settings") }
+
+@Composable
+private fun PlayInBlockBrand(modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(0.dp)
+    ) {
+        Text(
+            text = "PLAY",
+            modifier = Modifier.fillMaxWidth().graphicsLayer { shadowElevation = 4f },
+            textAlign = TextAlign.Center,
+            color = HomeAccentDeep,
+            fontSize = 46.sp,
+            lineHeight = 48.sp,
+            fontWeight = FontWeight.Black,
+            letterSpacing = 3.sp
+        )
+        Text(
+            text = "IN",
+            modifier = Modifier.fillMaxWidth(),
+            textAlign = TextAlign.Center,
+            color = HomeAccent,
+            fontSize = 30.sp,
+            lineHeight = 32.sp,
+            fontWeight = FontWeight.ExtraBold,
+            letterSpacing = 8.sp
+        )
+        Text(
+            text = "BLOCK",
+            modifier = Modifier.fillMaxWidth().graphicsLayer { shadowElevation = 4f },
+            textAlign = TextAlign.Center,
+            color = HomeAccentDeep,
+            fontSize = 46.sp,
+            lineHeight = 48.sp,
+            fontWeight = FontWeight.Black,
+            letterSpacing = 2.sp
+        )
+    }
+}
+
+@Composable
+private fun CurrentLevelButtonCard(
+    currentChapter: Int,
+    onClick: () -> Unit
+) {
+    Card(
+        onClick = onClick,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(84.dp),
+        shape = RoundedCornerShape(26.dp),
+        colors = CardDefaults.cardColors(containerColor = HomeAccentSoft),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 22.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = "LEVEL $currentChapter",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Black,
+                color = HomeAccentDeep
+            )
+            Spacer(Modifier.width(10.dp))
+            Icon(
+                imageVector = Icons.Default.PlayArrow,
+                contentDescription = null,
+                tint = HomeAccentDeep,
+                modifier = Modifier.size(28.dp)
+            )
         }
     }
 }
@@ -165,7 +235,7 @@ fun SettingsScreen(
     var confirmReset by remember { mutableStateOf(false) }
 
     Column(
-        modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)
+        modifier = modifier.fillMaxSize().background(HomeCream)
             .safeDrawingPadding().verticalScroll(rememberScrollState()).padding(16.dp)
     ) {
         ScreenHeader(title = "Settings", onBack = onBack)
@@ -258,7 +328,7 @@ private fun SettingRow(label: String, checked: Boolean, onChanged: (Boolean) -> 
 @Composable
 fun HowToPlayScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
     Column(
-        modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)
+        modifier = modifier.fillMaxSize().background(HomeCream)
             .safeDrawingPadding().verticalScroll(rememberScrollState()).padding(16.dp)
     ) {
         ScreenHeader(title = "How to Play", onBack = onBack)
@@ -272,7 +342,7 @@ fun HowToPlayScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
         Spacer(Modifier.height(16.dp))
         Text("5. Adventures begin with 4×4 grids, then grow through 5×5, 6×6, 7×7 and 8×8, with surprise grids near the end.", style = MaterialTheme.typography.bodyLarge)
         Spacer(Modifier.height(16.dp))
-        Text("6. The first move starts the play clock. Pause freezes time while keeping the puzzle visible. Resume continues from the same board.", style = MaterialTheme.typography.bodyLarge)
+        Text("6. The timer starts automatically as soon as the adventure opens. Pause freezes time while keeping the puzzle visible. Resume continues from the same board.", style = MaterialTheme.typography.bodyLarge)
         Spacer(Modifier.height(16.dp))
         Text("7. Coins = completion + speed + efficient moves. The fixed targets depend on grid size. Replays award only improvement over your Adventure best. Coins have no cash value.", style = MaterialTheme.typography.bodyLarge)
         Spacer(Modifier.height(16.dp))
@@ -296,7 +366,6 @@ private fun ScreenHeader(title: String, onBack: () -> Unit) {
     Spacer(Modifier.height(16.dp))
 }
 
-
 @androidx.compose.ui.tooling.preview.Preview(name = "Journey • compact phone", widthDp = 360, heightDp = 800, showBackground = true)
 @Composable
 private fun HomeLightPreview() {
@@ -307,6 +376,7 @@ private fun HomeLightPreview() {
             journeyComplete = false, onContinue = {}, onStartJourney = {}, onJourneyHistory = {}, onHowToPlay = {}, onSettings = {})
     }
 }
+
 @androidx.compose.ui.tooling.preview.Preview(name = "Journey • night", widthDp = 360, heightDp = 800, showBackground = true)
 @Composable
 private fun HomeDarkPreview() {
