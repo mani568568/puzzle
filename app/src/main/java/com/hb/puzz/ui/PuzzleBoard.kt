@@ -3,9 +3,7 @@ package com.hb.puzz.ui
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -33,6 +31,10 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathMeasure
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.StrokeCap
@@ -45,11 +47,11 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import com.hb.puzz.domain.PuzzleEngine
-import kotlinx.coroutines.launch
-import kotlin.math.PI
+import com.hb.puzz.domain.mergeContours
+import com.hb.puzz.domain.MergeMotion
 import kotlin.math.floor
-import kotlin.math.sin
 import kotlin.math.roundToInt
+import kotlin.math.sqrt
 
 /**
  * Picture puzzle board with rigid connected clusters.
@@ -66,7 +68,8 @@ fun PuzzleBoard(
     celebratingTileIds: Set<Int>,
     celebrationVersion: Int,
     onGroupDropped: (anchorTileId: Int, targetPosition: Int) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    inputEnabled: Boolean = true
 ) {
     val gridSize = engine.gridSize
     val positions = remember(boardVersion) { engine.getCurrentPositions() }
@@ -75,12 +78,9 @@ fun PuzzleBoard(
     }
     val groupedTileIds = remember(connectedGroups) { connectedGroups.flatten().toSet() }
 
-    val primary = MaterialTheme.colorScheme.primary
-    val secondary = MaterialTheme.colorScheme.secondary
     val surface = MaterialTheme.colorScheme.surface
-    val outline = MaterialTheme.colorScheme.outline
-    val gridBorder = Color(0xFFC9A064)
-    val tileDivider = Color.White
+    val gridBorder = MaterialTheme.colorScheme.primary.copy(alpha = 0.65f)
+    val tileDivider = MaterialTheme.colorScheme.surface
     val dragAccent = Color(0xFF67C9D7)
     val density = LocalDensity.current
 
@@ -108,8 +108,8 @@ fun PuzzleBoard(
             modifier = Modifier
                 .width(boardWidth)
                 .height(boardHeight)
-                .background(Color(0xFFFFFBF5), RoundedCornerShape(10.dp))
-                .border(2.5.dp, gridBorder, RoundedCornerShape(10.dp))
+                .background(surface, RoundedCornerShape(10.dp))
+                .border(1.dp, gridBorder, RoundedCornerShape(10.dp))
         ) {
             // A single shared preview footprint keeps merged pieces looking like one object.
             val anchor = draggingAnchorTileId
@@ -168,42 +168,25 @@ fun PuzzleBoard(
                     val targetX = col * tileWidthPx
                     val targetY = row * tileHeightPx
                     val isDragging = tileId in draggingGroupIds
-                    val isCelebrating = tileId in celebratingTileIds
-                    val celebrationPulse = remember(tileId) { Animatable(1f) }
-
-                    LaunchedEffect(celebrationVersion, isCelebrating) {
-                        if (isCelebrating) {
-                            celebrationPulse.snapTo(1f)
-                            celebrationPulse.animateTo(1.07f, tween(110))
-                            celebrationPulse.animateTo(
-                                1f,
-                                spring(
-                                    dampingRatio = Spring.DampingRatioMediumBouncy,
-                                    stiffness = Spring.StiffnessMedium
-                                )
-                            )
-                        }
-                    }
-
                     val animatedX by animateFloatAsState(
                         targetValue = targetX,
-                        animationSpec = tween(235, easing = FastOutSlowInEasing),
+                        animationSpec = tween(280, easing = FastOutSlowInEasing),
                         label = "tile-x-$tileId"
                     )
                     val animatedY by animateFloatAsState(
                         targetValue = targetY,
-                        animationSpec = tween(235, easing = FastOutSlowInEasing),
+                        animationSpec = tween(280, easing = FastOutSlowInEasing),
                         label = "tile-y-$tileId"
                     )
                     val dragScale by animateFloatAsState(
                         targetValue = if (isDragging) 1.018f else 1f,
-                        animationSpec = tween(95),
+                        animationSpec = tween(160, easing = FastOutSlowInEasing),
                         label = "tile-scale-$tileId"
                     )
 
                     // Slightly smoother than the previous heavy version, while still controlled.
                     val visualDrag = if (isDragging) {
-                        Offset(dragDelta.x * 0.86f, dragDelta.y * 0.86f)
+                        Offset(dragDelta.x, dragDelta.y)
                     } else Offset.Zero
 
                     Canvas(
@@ -216,9 +199,9 @@ fun PuzzleBoard(
                                     (animatedY + visualDrag.y).roundToInt()
                                 )
                             }
-                            .zIndex(if (isDragging) 20f else if (isCelebrating) 12f else 1f)
+                            .zIndex(if (isDragging) 20f else 1f)
                             .graphicsLayer {
-                                val scale = dragScale * celebrationPulse.value
+                                val scale = dragScale
                                 scaleX = scale
                                 scaleY = scale
                                 shadowElevation = if (isDragging) 10.dp.toPx() else 0f
@@ -232,8 +215,8 @@ fun PuzzleBoard(
                                     Modifier
                                 }
                             )
-                            .pointerInput(tileId, position, tileWidthPx, tileHeightPx, boardVersion) {
-                                detectDragGestures(
+                            .pointerInput(tileId, position, tileWidthPx, tileHeightPx, boardVersion, inputEnabled) {
+                                if (inputEnabled) detectDragGestures(
                                     onDragStart = {
                                         draggingAnchorTileId = tileId
                                         draggingGroupIds = setOf(tileId)
@@ -317,48 +300,51 @@ fun PuzzleBoard(
                     val groupHeight = tileHeight * heightCells
                     val isDragging = group.any { it in draggingGroupIds }
                     val isCelebrating = group.any { it in celebratingTileIds }
-                    val anchorTileId = draggingAnchorTileId?.takeIf { it in group }
-                    val celebrationPulse = remember(groupKey) { Animatable(1f) }
-                    val pixieDustProgress = remember(groupKey) { Animatable(1f) }
-
+                    val mergeProgress = remember(groupKey) { Animatable(1f) }
                     LaunchedEffect(celebrationVersion, isCelebrating) {
                         if (isCelebrating) {
-                            pixieDustProgress.snapTo(0f)
-                            launch {
-                                pixieDustProgress.animateTo(
-                                    1f,
-                                    tween(durationMillis = 1_280, easing = LinearEasing)
-                                )
-                            }
-                            celebrationPulse.snapTo(1f)
-                            celebrationPulse.animateTo(1.045f, tween(110))
-                            celebrationPulse.animateTo(
-                                1f,
-                                spring(
-                                    dampingRatio = Spring.DampingRatioNoBouncy,
-                                    stiffness = Spring.StiffnessMedium
-                                )
-                            )
+                            mergeProgress.snapTo(0f)
+                            mergeProgress.animateTo(1f,
+                                tween(MergeMotion.DURATION_MILLIS, easing = LinearEasing))
+                        } else {
+                            mergeProgress.animateTo(1f, tween(240, easing = FastOutSlowInEasing))
                         }
                     }
+                    // Build continuous contours only when geometry changes, never per frame.
+                    val contourPaths = remember(groupPositions, tileWidthPx, tileHeightPx) {
+                        mergeContours(groupPositions.toSet(), gridSize).map { corners ->
+                            Path().apply {
+                                corners.forEachIndexed { index, corner ->
+                                    val x = (corner.x - minCol) * tileWidthPx
+                                    val y = (corner.y - minRow) * tileHeightPx
+                                    if (index == 0) moveTo(x, y) else lineTo(x, y)
+                                }
+                                close()
+                            }
+                        }
+                    }
+                    val contourMeasures = remember(contourPaths) {
+                        contourPaths.map { path -> PathMeasure().apply { setPath(path, true) } }
+                    }
+                    val perimeterLength = remember(contourMeasures) { contourMeasures.sumOf { it.length.toDouble() }.toFloat() }
 
                     val animatedX by animateFloatAsState(
                         targetValue = baseX,
-                        animationSpec = tween(240, easing = FastOutSlowInEasing),
+                        animationSpec = tween(280, easing = FastOutSlowInEasing),
                         label = "group-x-$groupKey"
                     )
                     val animatedY by animateFloatAsState(
                         targetValue = baseY,
-                        animationSpec = tween(240, easing = FastOutSlowInEasing),
+                        animationSpec = tween(280, easing = FastOutSlowInEasing),
                         label = "group-y-$groupKey"
                     )
                     val groupScale by animateFloatAsState(
                         targetValue = if (isDragging) 1.012f else 1f,
-                        animationSpec = tween(95),
+                        animationSpec = tween(160, easing = FastOutSlowInEasing),
                         label = "group-scale-$groupKey"
                     )
                     val visualDrag = if (isDragging) {
-                        Offset(dragDelta.x * 0.86f, dragDelta.y * 0.86f)
+                        Offset(dragDelta.x, dragDelta.y)
                     } else Offset.Zero
 
                     Canvas(
@@ -370,11 +356,13 @@ fun PuzzleBoard(
                                     (animatedY + visualDrag.y).roundToInt()
                                 )
                             }
-                            .zIndex(if (isDragging) 30f else if (isCelebrating) 16f else 5f)
+                            .zIndex(if (isDragging) 30f else if (mergeProgress.value < 1f) 16f else 5f)
                             .graphicsLayer {
-                                val scale = groupScale * celebrationPulse.value
+                                val lift = mergeLift(mergeProgress.value)
+                                val scale = groupScale * (1f + lift * 0.012f)
                                 scaleX = scale
                                 scaleY = scale
+                                translationY = -4.dp.toPx() * lift
                                 // Avoid a rectangular layer shadow around irregular merged shapes.
                                 shadowElevation = 0f
                                 clip = false
@@ -404,6 +392,16 @@ fun PuzzleBoard(
                         val srcRight = (sourceMaxCol + 1) * image.width / gridSize
                         val srcBottom = (sourceMaxRow + 1) * image.height / gridSize
 
+                        val lift = mergeLift(mergeProgress.value)
+                        if (lift > 0f) {
+                            translate(top = 5.dp.toPx() * lift) {
+                                drawPath(mask, Color.Black.copy(alpha = 0.13f * lift))
+                                contourPaths.forEach { contour ->
+                                    drawPath(contour, Color.Black.copy(alpha = 0.04f * lift),
+                                        style = Stroke(6.dp.toPx(), join = StrokeJoin.Round))
+                                }
+                            }
+                        }
                         clipPath(mask) {
                             drawImage(
                                 image = image,
@@ -415,123 +413,138 @@ fun PuzzleBoard(
                             )
                         }
 
-                        // Shared outer contour only — no internal grid lines at all.
-                        val glowWidth = when {
-                            isCelebrating -> 7.dp.toPx()
-                            isDragging -> 5.5.dp.toPx()
-                            else -> 4.dp.toPx()
-                        }
-                        val edgeWidth = when {
-                            isCelebrating -> 3.dp.toPx()
-                            isDragging -> 2.4.dp.toPx()
-                            else -> 1.7.dp.toPx()
-                        }
-                        val glowColor = when {
-                            isCelebrating -> dragAccent.copy(alpha = 0.52f)
-                            isDragging -> dragAccent.copy(alpha = 0.34f)
-                            else -> gridBorder.copy(alpha = 0.18f)
-                        }
-                        val edgeColor = when {
-                            isCelebrating -> dragAccent
-                            isDragging -> dragAccent
-                            else -> gridBorder.copy(alpha = 0.96f)
+                        // A quiet resting border keeps the picture readable. No internal seams.
+                        contourPaths.forEach { contour ->
+                            drawPath(contour, if (isDragging) dragAccent else gridBorder.copy(alpha = 0.8f),
+                                style = Stroke(if (isDragging) 2.dp.toPx() else 1.25.dp.toPx(),
+                                    cap = StrokeCap.Round, join = StrokeJoin.Round))
                         }
 
-                        // Build the outer perimeter once so the stable border and the magical
-                        // merge trail are rendered from exactly the same geometry. The third value
-                        // is a small inward normal, keeping sparkles inside the cluster bounds.
-                        val outerEdges = mutableListOf<Triple<Offset, Offset, Offset>>()
-                        occupiedPositions.forEach { boardPosition ->
-                            val boardRow = boardPosition / gridSize
-                            val boardCol = boardPosition % gridSize
-                            val localRow = boardRow - minRow
-                            val localCol = boardCol - minCol
-                            val cellW = size.width / widthCells
-                            val cellH = size.height / heightCells
-                            val left = localCol * cellW
-                            val top = localRow * cellH
-                            val right = left + cellW
-                            val bottom = top + cellH
+                        if (mergeProgress.value < 1f) {
+                            val progress = mergeProgress.value
+                            val alpha = smoothFraction(progress / 0.12f) *
+                                (1f - smoothFraction((progress - 0.82f) / 0.18f))
 
-                            if (boardRow == 0 || boardPosition - gridSize !in occupiedPositions) {
-                                outerEdges += Triple(Offset(left, top), Offset(right, top), Offset(0f, 1f))
-                            }
-                            if (boardRow == gridSize - 1 || boardPosition + gridSize !in occupiedPositions) {
-                                outerEdges += Triple(Offset(left, bottom), Offset(right, bottom), Offset(0f, -1f))
-                            }
-                            if (boardCol == 0 || boardPosition - 1 !in occupiedPositions) {
-                                outerEdges += Triple(Offset(left, top), Offset(left, bottom), Offset(1f, 0f))
-                            }
-                            if (boardCol == gridSize - 1 || boardPosition + 1 !in occupiedPositions) {
-                                outerEdges += Triple(Offset(right, top), Offset(right, bottom), Offset(-1f, 0f))
-                            }
-                        }
-
-                        outerEdges.forEach { (start, end, _) ->
-                            drawLine(glowColor, start, end, glowWidth, StrokeCap.Round)
-                            drawLine(edgeColor, start, end, edgeWidth, StrokeCap.Round)
-                        }
-
-                        // Pixie-dust merge moment: a warm-gold shimmer races around every exposed
-                        // edge while tiny aqua/white/gold particles twinkle just inside the block.
-                        // It only runs for newly-created/expanded groups; the normal merged outline
-                        // remains quiet after the effect settles.
-                        if (isCelebrating) {
-                            val progress = pixieDustProgress.value.coerceIn(0f, 1f)
-                            val envelope = sin(progress.toDouble() * PI).toFloat().coerceAtLeast(0f)
-                            val shimmer = Color(0xFFFFD66B).copy(alpha = 0.28f + envelope * 0.62f)
-                            val sparkleColors = listOf(
-                                Color(0xFFFFE58A),
-                                Color(0xFF8FE7E8),
-                                Color.White,
-                                Color(0xFFFFC7E7)
-                            )
-                            val inward = 3.2.dp.toPx()
-
-                            outerEdges.forEachIndexed { edgeIndex, edge ->
-                                val (start, end, normal) = edge
-                                drawLine(
-                                    color = shimmer,
-                                    start = start,
-                                    end = end,
-                                    strokeWidth = edgeWidth + 1.7.dp.toPx(),
-                                    cap = StrokeCap.Round
-                                )
-
-                                repeat(4) { particleIndex ->
-                                    val phase = (progress * 1.85f + edgeIndex * 0.173f + particleIndex * 0.229f) % 1f
-                                    val dx = end.x - start.x
-                                    val dy = end.y - start.y
-                                    val wave = sin((progress * 9f + edgeIndex + particleIndex * 0.7f).toDouble() * PI).toFloat()
-                                    val center = Offset(
-                                        x = start.x + dx * phase + normal.x * inward * (0.65f + 0.35f * wave),
-                                        y = start.y + dy * phase + normal.y * inward * (0.65f + 0.35f * wave)
+                            // First trace the exact outer shape of the newly merged cluster.
+                            // A soft halo sits behind the gold line so the boundary reads clearly
+                            // without covering the artwork.
+                            val traced = smoothFraction((progress - 0.06f) / 0.58f)
+                            var remainingLength = perimeterLength * traced
+                            contourMeasures.forEach { measure ->
+                                val distance = remainingLength.coerceIn(0f, measure.length)
+                                if (distance > 0f && alpha > 0f) {
+                                    val trail = Path()
+                                    measure.getSegment(0f, distance, trail, true)
+                                    drawPath(
+                                        trail,
+                                        Color(0xFFFFD86B).copy(alpha = alpha * 0.18f),
+                                        style = Stroke(10.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
                                     )
-                                    val twinkle = (0.58f + 0.42f * sin((progress * 13f + particleIndex).toDouble() * PI).toFloat()).coerceIn(0.15f, 1f)
-                                    val radius = (1.25f + (particleIndex % 3) * 0.72f) * density.density
-                                    val color = sparkleColors[(edgeIndex + particleIndex) % sparkleColors.size]
-                                    drawCircle(
-                                        color = color.copy(alpha = envelope * twinkle),
-                                        radius = radius,
-                                        center = center
+                                    drawPath(
+                                        trail,
+                                        Color(0xFFF6C554).copy(alpha = alpha),
+                                        style = Stroke(2.8.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
                                     )
+                                    drawPath(
+                                        trail,
+                                        Color.White.copy(alpha = alpha * 0.94f),
+                                        style = Stroke(0.9.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                                    )
+                                }
+                                remainingLength -= measure.length
+                            }
 
-                                    if ((edgeIndex + particleIndex) % 3 == 0 && envelope > 0.18f) {
-                                        val ray = radius * 1.8f
-                                        drawLine(
-                                            Color.White.copy(alpha = envelope * 0.82f),
-                                            Offset(center.x - ray, center.y),
-                                            Offset(center.x + ray, center.y),
-                                            0.8.dp.toPx(),
-                                            StrokeCap.Round
-                                        )
-                                        drawLine(
-                                            Color.White.copy(alpha = envelope * 0.82f),
-                                            Offset(center.x, center.y - ray),
-                                            Offset(center.x, center.y + ray),
-                                            0.8.dp.toPx(),
-                                            StrokeCap.Round
-                                        )
+                            // Once most of the border has been traced, make the whole contour
+                            // breathe once. This gives the merge a clean "locked together" moment.
+                            val lockPulse = smoothFraction((progress - 0.42f) / 0.16f) *
+                                (1f - smoothFraction((progress - 0.78f) / 0.18f))
+                            if (lockPulse > 0f) {
+                                contourPaths.forEach { contour ->
+                                    drawPath(
+                                        contour,
+                                        Color(0xFFFFD86B).copy(alpha = lockPulse * 0.18f),
+                                        style = Stroke(12.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                                    )
+                                    drawPath(
+                                        contour,
+                                        Color(0xFFFFE99C).copy(alpha = lockPulse * 0.82f),
+                                        style = Stroke(2.1.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                                    )
+                                }
+                            }
+
+                            // Magic dust is emitted from points all around the real merged contour.
+                            // The particle count increases with group size, so bigger merges feel
+                            // more rewarding without making tiny 2-piece joins visually noisy.
+                            val dustTimeline = ((progress - 0.10f) / 0.82f).coerceIn(0f, 1f)
+                            if (dustTimeline > 0f && perimeterLength > 0f) {
+                                val particleCount = (10 + group.size * 3).coerceIn(16, 58)
+                                val center = Offset(size.width / 2f, size.height / 2f)
+                                repeat(particleCount) { index ->
+                                    val h1 = magicUnit(index * 97 + group.size * 31 + celebrationVersion * 17)
+                                    val h2 = magicUnit(index * 193 + group.size * 53 + celebrationVersion * 29)
+                                    val h3 = magicUnit(index * 389 + group.size * 71 + celebrationVersion * 37)
+                                    val delayFraction = h2 * 0.24f
+                                    val local = ((dustTimeline - delayFraction) /
+                                        (1f - delayFraction)).coerceIn(0f, 1f)
+                                    if (local > 0f) {
+                                        val particleAlpha = smoothFraction(local / 0.16f) *
+                                            (1f - smoothFraction((local - 0.48f) / 0.52f))
+                                        if (particleAlpha > 0f) {
+                                            val contourDistance = perimeterLength *
+                                                ((index.toFloat() + 0.20f + h1 * 0.60f) / particleCount.toFloat())
+                                                    .coerceIn(0f, 0.9999f)
+                                            val edgePoint = pointAlongContours(contourMeasures, contourDistance)
+                                            val dx = edgePoint.x - center.x
+                                            val dy = edgePoint.y - center.y
+                                            val length = sqrt(dx * dx + dy * dy).coerceAtLeast(1f)
+                                            val outwardX = dx / length
+                                            val outwardY = dy / length
+                                            val tangentX = -outwardY
+                                            val tangentY = outwardX
+                                            val travel = (4.dp.toPx() + h1 * 20.dp.toPx()) *
+                                                smoothFraction(local)
+                                            val sideDrift = (h2 - 0.5f) * 12.dp.toPx() * local
+                                            val px = edgePoint.x + outwardX * travel + tangentX * sideDrift
+                                            val py = edgePoint.y + outwardY * travel + tangentY * sideDrift
+                                            val radius = (0.9.dp.toPx() + h3 * 1.8.dp.toPx())
+                                            val gold = if (index % 4 == 0) {
+                                                Color.White
+                                            } else {
+                                                Color(0xFFFFD968)
+                                            }
+
+                                            drawCircle(
+                                                color = gold.copy(alpha = particleAlpha * 0.20f),
+                                                radius = radius * 2.4f,
+                                                center = Offset(px, py)
+                                            )
+                                            drawCircle(
+                                                color = gold.copy(alpha = particleAlpha),
+                                                radius = radius,
+                                                center = Offset(px, py)
+                                            )
+
+                                            // A few particles become tiny four-point stars,
+                                            // matching the magical sparkle feel in the reference.
+                                            if (index % 3 == 0) {
+                                                val arm = radius * (2.2f + h1)
+                                                drawLine(
+                                                    color = Color.White.copy(alpha = particleAlpha * 0.92f),
+                                                    start = Offset(px - arm, py),
+                                                    end = Offset(px + arm, py),
+                                                    strokeWidth = 0.8.dp.toPx(),
+                                                    cap = StrokeCap.Round
+                                                )
+                                                drawLine(
+                                                    color = Color.White.copy(alpha = particleAlpha * 0.92f),
+                                                    start = Offset(px, py - arm),
+                                                    end = Offset(px, py + arm),
+                                                    strokeWidth = 0.8.dp.toPx(),
+                                                    cap = StrokeCap.Round
+                                                )
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -561,8 +574,8 @@ fun PuzzleBoard(
                                         IntOffset(hitX.roundToInt(), hitY.roundToInt())
                                     }
                                     .zIndex(if (isDragging) 40f else 18f)
-                                    .pointerInput(groupKey, hitTileId, boardVersion, tileWidthPx, tileHeightPx) {
-                                        detectDragGestures(
+                                    .pointerInput(groupKey, hitTileId, boardVersion, tileWidthPx, tileHeightPx, inputEnabled) {
+                                        if (inputEnabled) detectDragGestures(
                                             onDragStart = {
                                                 draggingAnchorTileId = hitTileId
                                                 draggingGroupIds = group
@@ -657,3 +670,32 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawSingleTile(
         filterQuality = FilterQuality.High
     )
 }
+
+/** Smooth endpoints avoid a pop at lift-off and a snap when the block lands. */
+private fun smoothFraction(value: Float): Float {
+    val t = value.coerceIn(0f, 1f)
+    return t * t * (3f - 2f * t)
+}
+
+
+private fun pointAlongContours(measures: List<PathMeasure>, distance: Float): Offset {
+    if (measures.isEmpty()) return Offset.Zero
+    var remaining = distance.coerceAtLeast(0f)
+    measures.forEach { measure ->
+        if (remaining <= measure.length) {
+            return measure.getPosition(remaining.coerceIn(0f, measure.length))
+        }
+        remaining -= measure.length
+    }
+    val last = measures.last()
+    return last.getPosition(last.length.coerceAtLeast(0f))
+}
+
+/** Stable pseudo-random 0..1 value so particles never jitter between animation frames. */
+private fun magicUnit(seed: Int): Float {
+    val mixed = (seed.toLong() * 1_103_515_245L + 12_345L) and 0x7fffffffL
+    return mixed.toFloat() / 0x7fffffffL.toFloat()
+}
+
+private fun mergeLift(progress: Float): Float =
+    smoothFraction(progress / 0.20f) * (1f - smoothFraction((progress - 0.70f) / 0.30f))

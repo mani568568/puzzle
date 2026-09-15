@@ -90,13 +90,9 @@ class PuzzleEngineTest {
     fun `connected_groups_no_cross_boundary`() {
         val engine = PuzzleEngine(3, 12345L)
         
-        // Set up state where tile 0 (should be at pos 0) is at position 3
-        // This breaks horizontal connection across row boundary
-        assertTrue(engine.restorePositions(IntArray(9) { it }))
-        engine.attemptSwap(0, 3)
-        val groups = engine.getConnectedGroups()
-        
-        // Row boundary should prevent false connections
+        assertTrue(engine.restorePositions(intArrayOf(4, 5, 0, 1, 8, 6, 2, 7, 3)))
+        // IDs 0 and 1 are at positions 2 and 3, on opposite row edges.
+        assertFalse(engine.getCorrectConnections().any { it.firstTileId == 0 && it.secondTileId == 1 })
     }
     
     @Test
@@ -108,8 +104,10 @@ class PuzzleEngineTest {
         assertArrayEquals(engine1.getCurrentPositions(), engine2.getCurrentPositions())
         
         // Modify engine1 and verify engine2 is unchanged
+        val copyBefore = engine2.getCurrentPositions()
         engine1.attemptSwap(0, 1)
-        assertFalse(engine1.isSolved())
+        assertArrayEquals(copyBefore, engine2.getCurrentPositions())
+        assertFalse(engine1.getCurrentPositions().contentEquals(engine2.getCurrentPositions()))
     }
     
     @Test
@@ -205,6 +203,24 @@ class PuzzleEngineTest {
         assertEquals(8, engine.getPositionOf(5))
         assertTrue(engine.getCorrectConnections().size >= 0)
         assertTrue(before >= 0)
+    }
+
+    @Test fun `many group moves preserve every tile and rigid moving group`() {
+        val random = kotlin.random.Random(871)
+        for (grid in 4..8) {
+            val engine = PuzzleEngine(grid, 123L)
+            repeat(300) {
+                val anchor = random.nextInt(grid * grid)
+                val destination = random.nextInt(grid * grid)
+                val targets = engine.getGroupMoveTargets(anchor, destination)
+                val old = engine.getCurrentPositions()
+                if (engine.attemptMoveGroup(anchor, destination)) {
+                    assertNotNull(targets)
+                    targets!!.forEach { (tile, position) -> assertEquals(position, engine.getPositionOf(tile)) }
+                } else assertArrayEquals(old, engine.getCurrentPositions())
+                assertTrue(engine.isValidPermutation())
+            }
+        }
     }
 
 }

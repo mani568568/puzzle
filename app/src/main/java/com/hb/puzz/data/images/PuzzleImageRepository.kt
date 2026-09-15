@@ -13,12 +13,13 @@ import java.io.File
 import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URI
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlin.random.Random
 
 class PuzzleImageRepository(
-    private val context: Context,
+    context: Context,
     private val settings: GameSettings,
     apiKey: String = BuildConfig.PEXELS_API_KEY
 ) {
@@ -43,7 +44,7 @@ class PuzzleImageRepository(
         if (!pexelsApi.isConfigured()) {
             return@withContext fallback(
                 level,
-                "Preloaded image • Add a Pexels API key to enable online photos."
+                "Offline artwork"
             )
         }
 
@@ -57,25 +58,30 @@ class PuzzleImageRepository(
                     return@withContext fallback(level, "Pexels returned no images for this level. Using the preloaded image.")
                 }
                 val selectedIndex = if (forceRefresh) Random.nextInt(results.size) else ((level.id - 1) * 7) % results.size
-                results[selectedIndex].also { selected ->
-                    settings.savePexelsPhoto(level.id, selected)
-                }
+                results[selectedIndex]
             }
             val bitmap = loadCachedOrDownload(level.id, resolvedMeta)
+            settings.savePexelsPhoto(level.id, resolvedMeta)
             PuzzleImage(
                 bitmap = bitmap,
                 sourceMode = ImageSourceMode.PEXELS,
                 attribution = resolvedMeta
             )
+        } catch (error: CancellationException) {
+            throw error
         } catch (error: Exception) {
-            fallback(level, "Unable to load Pexels right now. Using the preloaded image.")
+            fallback(level, "Enjoying offline artwork for now.")
         }
     }
 
     suspend fun refreshLevelImage(level: PuzzleLevel): PuzzleImage = withContext(Dispatchers.IO) {
-        settings.clearPexelsPhoto(level.id)
-        deleteLevelCache(level.id)
-        loadLevelImage(level, ImageSourceMode.PEXELS, forceRefresh = true)
+        val replacement = loadLevelImage(level, ImageSourceMode.PEXELS, forceRefresh = true)
+        if (replacement.usedFallback) loadLevelImage(level, ImageSourceMode.PEXELS) else {
+            val keep = "level_${level.id}_${replacement.attribution?.id}.jpg"
+            cacheDirectory.listFiles()?.filter { it.name.startsWith("level_${level.id}_") && it.name != keep }
+                ?.forEach { it.delete() }
+            replacement
+        }
     }
 
     private fun fallback(level: PuzzleLevel, message: String): PuzzleImage = PuzzleImage(
@@ -103,16 +109,35 @@ class PuzzleImageRepository(
             if (connection.responseCode !in 200..299) {
                 throw PexelsApiException("Image download failed (${connection.responseCode})")
             }
-            BitmapFactory.decodeStream(connection.inputStream)
+            val bytes = connection.inputStream.use { input ->
+                val output = java.io.ByteArrayOutputStream()
+                val buffer = ByteArray(8192)
+                var read: Int
+                while (input.read(buffer).also { read = it } != -1) {
+                    if (output.size() + read > 15 * 1024 * 1024) throw PexelsApiException("Image is too large")
+                    output.write(buffer, 0, read)
+                }
+                output.toByteArray()
+            }
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+            if (bounds.outWidth <= 0 || bounds.outHeight <= 0) throw PexelsApiException("Invalid image")
+            var sample = 1
+            while (maxOf(bounds.outWidth, bounds.outHeight) / sample > 2048) sample *= 2
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample })
                 ?: throw PexelsApiException("Pexels image could not be decoded")
         } finally {
             connection.disconnect()
         }
 
         val square = centerCropSquare(downloaded, 1000)
-        FileOutputStream(file).use { output ->
-            square.compress(Bitmap.CompressFormat.JPEG, 90, output)
-        }
+        val temporary = File(file.parentFile, file.name + ".tmp")
+        try {
+            FileOutputStream(temporary).use { output ->
+                check(square.compress(Bitmap.CompressFormat.JPEG, 90, output))
+            }
+            check(temporary.renameTo(file)) { "Could not store puzzle image" }
+        } finally { temporary.delete() }
         return square
     }
 
@@ -121,7 +146,10 @@ class PuzzleImageRepository(
         val left = (source.width - edge) / 2
         val top = (source.height - edge) / 2
         val cropped = Bitmap.createBitmap(source, left, top, edge, edge)
-        if (cropped.width == size && cropped.height == size) return cropped
+        if (cropped.width == size && cropped.height == size) {
+            if (cropped !== source) source.recycle()
+            return cropped
+        }
 
         val output = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         Canvas(output).drawBitmap(
@@ -131,7 +159,7 @@ class PuzzleImageRepository(
             null
         )
         if (cropped !== source && !cropped.isRecycled) cropped.recycle()
-        if (source !== cropped && !source.isRecycled) source.recycle()
+        if (!source.isRecycled) source.recycle()
         return output
     }
 

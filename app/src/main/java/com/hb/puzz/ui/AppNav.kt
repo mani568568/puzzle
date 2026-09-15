@@ -1,5 +1,6 @@
 package com.hb.puzz.ui
 
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -32,13 +33,22 @@ fun CozyBlocksApp(settings: GameSettings) {
     val context = LocalContext.current
     val imageRepository = remember(settings) { PuzzleImageRepository(context, settings) }
 
-    val completedLevels by settings.completedLevelsFlow.collectAsState(initial = emptySet())
-    val highestLevel by settings.highestLevelFlow.collectAsState(initial = 1)
-    val savedSession by settings.savedSessionFlow.collectAsState(initial = null)
-    val soundEnabled by settings.soundEnabledFlow.collectAsState(initial = true)
-    val hapticsEnabled by settings.hapticsEnabledFlow.collectAsState(initial = true)
-    val darkThemeEnabled by settings.darkThemeFlow.collectAsState(initial = false)
-    val imageSource by settings.imageSourceFlow.collectAsState(initial = com.hb.puzz.data.images.ImageSourceMode.PEXELS)
+    val homeState by settings.homeFlow.collectAsState(initial = null)
+    val home = homeState
+    if (home == null) {
+        androidx.compose.foundation.layout.Box(
+            modifier = androidx.compose.ui.Modifier.fillMaxSize(),
+            contentAlignment = androidx.compose.ui.Alignment.Center
+        ) { androidx.compose.material3.CircularProgressIndicator() }
+        return
+    }
+    val completedLevels = home.completed
+    val highestLevel = home.highest
+    val savedSession = home.saved
+    val soundEnabled = home.sound
+    val hapticsEnabled = home.haptics
+    val darkThemeEnabled = home.dark
+    val imageSource = home.source
 
     fun goHome() {
         navController.navigate(Routes.HOME) {
@@ -57,6 +67,8 @@ fun CozyBlocksApp(settings: GameSettings) {
             val currentLevel = PuzzleLevel.requireLevel(currentChapter)
             val currentChapterTitle = currentLevel.title
             HomeScreen(
+                coinBalance = home.coins,
+                completedCount = completedLevels.size,
                 hasSavedGame = savedSession != null,
                 currentChapter = currentChapter,
                 currentChapterTitle = currentChapterTitle,
@@ -130,6 +142,7 @@ fun CozyBlocksApp(settings: GameSettings) {
                 onNextLevel = { nextLevel ->
                     val next = PuzzleLevel.requireLevel(nextLevel)
                     navController.navigate(Routes.game(nextLevel, next.pickGridSize())) {
+                        launchSingleTop = true
                         popUpTo(Routes.HOME) { inclusive = false }
                     }
                 }

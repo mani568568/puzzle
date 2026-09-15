@@ -1,1067 +1,412 @@
 package com.hb.puzz.ui
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animateIntAsState
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.border
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Timer
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.TransformOrigin
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalUriHandler
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
-import com.hb.puzz.data.GameSettings
-import com.hb.puzz.data.PuzzleClockMode
-import com.hb.puzz.data.images.ImageSourceMode
-import com.hb.puzz.data.images.PuzzleImage
-import com.hb.puzz.data.images.PuzzleImageRepository
-import com.hb.puzz.domain.PuzzleEngine
-import com.hb.puzz.domain.PuzzleLevel
-import com.hb.puzz.ui.feedback.PuzzleFeedbackPlayer
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.hb.puzz.data.GameSettings
+import com.hb.puzz.data.images.ImageSourceMode
+import com.hb.puzz.data.images.PuzzleImageRepository
+import com.hb.puzz.domain.MergeMotion
+import com.hb.puzz.domain.CoinRewards
+import com.hb.puzz.domain.PuzzleLevel
+import com.hb.puzz.ui.feedback.PuzzleFeedbackPlayer
 
 @Composable
 fun PicturePuzzleGameScreen(
-    levelId: Int,
-    gridSize: Int,
-    settings: GameSettings,
-    imageRepository: PuzzleImageRepository,
-    imageSource: ImageSourceMode,
-    soundEnabled: Boolean,
-    hapticsEnabled: Boolean,
-    onBack: () -> Unit,
-    onHome: () -> Unit,
-    onNextLevel: (Int) -> Unit,
+    levelId: Int, gridSize: Int, settings: GameSettings,
+    imageRepository: PuzzleImageRepository, imageSource: ImageSourceMode,
+    soundEnabled: Boolean, hapticsEnabled: Boolean,
+    onBack: () -> Unit, onHome: () -> Unit, onNextLevel: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val level = PuzzleLevel.requireLevel(levelId)
-    val activeGridSize = gridSize.takeIf(level::acceptsGridSize) ?: level.gridSize
-    val engine = remember(level.id, activeGridSize) { PuzzleEngine(activeGridSize, level.seed) }
-    val scope = rememberCoroutineScope()
+    val factory = remember(levelId, gridSize) {
+        object : ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : ViewModel> create(modelClass: Class<T>): T =
+                PuzzleGameViewModel(levelId, gridSize, settings, imageRepository, imageSource) as T
+        }
+    }
+    val vm: PuzzleGameViewModel = viewModel(key = "puzzle-$levelId-$gridSize", factory = factory)
+    val ui by vm.state.collectAsStateWithLifecycle()
+    val wallet by settings.coinBalanceFlow.collectAsStateWithLifecycle(initialValue = 0)
+    var confirmRestart by remember { mutableStateOf(false) }
+    var rewardInfo by remember { mutableStateOf(false) }
+    var resultsVisible by remember { mutableStateOf(false) }
+    LaunchedEffect(ui.receipt) {
+        resultsVisible = false
+        if (ui.receipt != null) { delay(MergeMotion.RESULT_DELAY_MILLIS); resultsVisible = true }
+    }
     val context = LocalContext.current
-    val uriHandler = LocalUriHandler.current
     val feedback = remember { PuzzleFeedbackPlayer(context) }
-    val totalConnections = remember(level.id, activeGridSize) { engine.getTotalPossibleConnections() }
-    val parMoves = remember(level.id, activeGridSize) { recommendedParMoves(activeGridSize, totalConnections) }
-    val initialChallengeSeconds = remember(level.id, activeGridSize) {
-        defaultChallengeSeconds(activeGridSize, totalConnections)
-    }
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    val totalConnections = vm.engine.getTotalPossibleConnections()
+    val progress = ui.connections.toFloat() / totalConnections
+    val animatedProgress by animateFloatAsState(progress, tween(400), label = "connections")
+    val uri = LocalUriHandler.current
 
-    var moveCount by remember(level.id, activeGridSize) { mutableIntStateOf(0) }
-    var boardVersion by remember(level.id, activeGridSize) { mutableIntStateOf(0) }
-    var isSolved by remember(level.id, activeGridSize) { mutableStateOf(false) }
-    var timeExpired by remember(level.id, activeGridSize) { mutableStateOf(false) }
-    var remainingSeconds by remember(level.id, activeGridSize) { mutableIntStateOf(initialChallengeSeconds) }
-    var totalChallengeSeconds by remember(level.id, activeGridSize) { mutableIntStateOf(initialChallengeSeconds) }
-    var timerStarted by remember(level.id, activeGridSize) { mutableStateOf(false) }
-    var timerRunning by remember(level.id, activeGridSize) { mutableStateOf(false) }
-    var timerExpanded by remember(level.id, activeGridSize) { mutableStateOf(false) }
-    var stopwatchElapsedSeconds by remember(level.id, activeGridSize) { mutableIntStateOf(0) }
-    var clockMode by remember(level.id, activeGridSize) { mutableStateOf(PuzzleClockMode.COUNTDOWN) }
-    var initialized by remember(level.id, activeGridSize) { mutableStateOf(false) }
-    var puzzleImage by remember(level.id, imageSource) { mutableStateOf<PuzzleImage?>(null) }
-    var imageLoading by remember(level.id, imageSource) { mutableStateOf(true) }
-    var refreshToken by remember(level.id, imageSource) { mutableIntStateOf(0) }
-
-    var connectionCount by remember(level.id, activeGridSize) { mutableIntStateOf(0) }
-    var celebratingTileIds by remember(level.id, activeGridSize) { mutableStateOf(emptySet<Int>()) }
-    var celebrationMessage by remember(level.id, activeGridSize) { mutableStateOf<String?>(null) }
-    var celebrationVersion by remember(level.id, activeGridSize) { mutableIntStateOf(0) }
-    var completionDetailsVisible by remember(level.id, activeGridSize) { mutableStateOf(false) }
-
-    fun refreshConnectionState() {
-        val connections = engine.getCorrectConnections()
-        connectionCount = connections.size
-    }
-
-    DisposableEffect(feedback) {
-        onDispose { feedback.release() }
-    }
-
-    LaunchedEffect(level.id, activeGridSize) {
-        val saved = settings.loadSession()
-        if (saved?.levelId == level.id && saved.gridSize == activeGridSize && engine.restorePositions(saved.positions)) {
-            moveCount = saved.moveCount
-            remainingSeconds = saved.remainingSeconds ?: initialChallengeSeconds
-            totalChallengeSeconds = (saved.totalChallengeSeconds ?: maxOf(initialChallengeSeconds, remainingSeconds))
-                .coerceAtLeast(remainingSeconds)
-            stopwatchElapsedSeconds = 0
-            clockMode = PuzzleClockMode.COUNTDOWN
-            timerStarted = saved.timerStarted
-            timerRunning = false
-            timerExpanded = false
-            isSolved = engine.isSolved()
-            timeExpired = timerStarted && remainingSeconds <= 0 && !isSolved
-        } else {
-            remainingSeconds = initialChallengeSeconds
-            totalChallengeSeconds = initialChallengeSeconds
-            stopwatchElapsedSeconds = 0
-            clockMode = PuzzleClockMode.COUNTDOWN
-            timerStarted = false
-            timerRunning = false
-            timerExpanded = false
-            settings.saveSession(
-                level.id,
-                activeGridSize,
-                engine.getCurrentPositions(),
-                0,
-                remainingSeconds,
-                clockMode,
-                stopwatchElapsedSeconds,
-                timerStarted,
-                totalChallengeSeconds
-            )
-        }
-        refreshConnectionState()
-        boardVersion++
-        initialized = true
-    }
-
-    LaunchedEffect(level.id, imageSource, refreshToken) {
-        imageLoading = true
-        puzzleImage = if (imageSource == ImageSourceMode.PEXELS && refreshToken > 0) {
-            imageRepository.refreshLevelImage(level)
-        } else {
-            imageRepository.loadLevelImage(level, imageSource)
-        }
-        imageLoading = false
-    }
-
-    // The challenge clock only runs after the player explicitly presses Start or resumes it.
-    LaunchedEffect(initialized, timerRunning, isSolved, imageLoading, puzzleImage, level.id, activeGridSize) {
-        if (!initialized || !timerRunning || isSolved || imageLoading || puzzleImage == null || timeExpired) {
-            return@LaunchedEffect
-        }
-        while (timerRunning && !isSolved && remainingSeconds > 0) {
-            delay(1_000)
-            if (timerRunning && !isSolved && remainingSeconds > 0) {
-                remainingSeconds--
-                if (remainingSeconds % 5 == 0) {
-                    settings.saveSession(
-                        level.id, activeGridSize, engine.getCurrentPositions(), moveCount,
-                        remainingSeconds, PuzzleClockMode.COUNTDOWN, 0, timerStarted, totalChallengeSeconds
-                    )
-                }
-                if (remainingSeconds == 0) {
-                    timeExpired = true
-                    timerRunning = false
-                    timerExpanded = false
-                    settings.saveSession(
-                        level.id, activeGridSize, engine.getCurrentPositions(), moveCount,
-                        0, PuzzleClockMode.COUNTDOWN, 0, true, totalChallengeSeconds
-                    )
-                }
+    DisposableEffect(lifecycle, vm) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_PAUSE || event == Lifecycle.Event.ON_STOP) {
+                vm.pause()
             }
         }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer); vm.pause() }
     }
+    DisposableEffect(feedback) { onDispose { feedback.release() } }
+    BackHandler { vm.saveAndLeave(onBack) }
 
-    // Let the player enjoy the fully restored artwork before showing results.
-    LaunchedEffect(isSolved, puzzleImage) {
-        completionDetailsVisible = false
-        if (isSolved && puzzleImage != null) {
-            delay(2_000)
-            completionDetailsVisible = true
-        }
-    }
+    val pleasantSkyBlue = Color(0xFFEAF7FF)
+    val softPanel = Color(0xFFF8FCFF)
 
-    fun showConnectionCelebration(newTileIds: Set<Int>, newConnectionCount: Int) {
-        val mergedGroups = engine.getConnectedGroups()
-            .filter { group -> group.any { it in newTileIds } }
-        celebratingTileIds = mergedGroups.flatten().toSet().ifEmpty { newTileIds }
-        val linkedGroupSize = mergedGroups
-            .maxOfOrNull { it.size }
-            ?: newTileIds.size
-
-        celebrationMessage = when {
-            linkedGroupSize >= 5 -> "Amazing! $linkedGroupSize pieces linked ✨"
-            linkedGroupSize >= 3 -> "Great combo! $linkedGroupSize pieces linked ✨"
-            newConnectionCount > 1 -> "Nice! $newConnectionCount new connections ✨"
-            else -> "Perfect fit! ✨"
-        }
-
-        celebrationVersion++
-        val token = celebrationVersion
-        scope.launch {
-            delay(1_450)
-            if (celebrationVersion == token) {
-                celebratingTileIds = emptySet()
-                celebrationMessage = null
-            }
-        }
-    }
-
-    fun persistTimerState() {
-        scope.launch {
-            settings.saveSession(
-                level.id,
-                activeGridSize,
-                engine.getCurrentPositions(),
-                moveCount,
-                remainingSeconds,
-                PuzzleClockMode.COUNTDOWN,
-                0,
-                timerStarted,
-                totalChallengeSeconds
-            )
-        }
-    }
-
-    fun adjustChallengeTime(deltaSeconds: Int) {
-        if (timeExpired || isSolved) return
-        val consumedSeconds = (totalChallengeSeconds - remainingSeconds).coerceAtLeast(0)
-        val maxRemaining = (initialChallengeSeconds + 10 * 60).coerceAtMost(30 * 60)
-        val newRemaining = (remainingSeconds + deltaSeconds).coerceIn(30, maxRemaining)
-        remainingSeconds = newRemaining
-        // Keep already-consumed time stable while the player adjusts the challenge budget.
-        totalChallengeSeconds = (consumedSeconds + newRemaining).coerceAtLeast(newRemaining)
-        persistTimerState()
-    }
-
-    fun openOrResumeTimer() {
-        if (!initialized || isSolved || timeExpired) return
-        timerExpanded = true
-        if (timerStarted) {
-            timerRunning = true
-            persistTimerState()
-        }
-    }
-
-    fun startTimer() {
-        if (!initialized || isSolved || timeExpired) return
-        timerStarted = true
-        timerRunning = true
-        timerExpanded = true
-        persistTimerState()
-    }
-
-    fun resetChallengeTimer() {
-        if (!initialized || isSolved) return
-        timerRunning = false
-        timerStarted = false
-        timeExpired = false
-        remainingSeconds = totalChallengeSeconds
-        stopwatchElapsedSeconds = 0
-        clockMode = PuzzleClockMode.COUNTDOWN
-        timerExpanded = true
-        persistTimerState()
-    }
-
-    fun pauseAndCollapseTimer() {
-        if (isSolved) return
-        timerRunning = false
-        timerExpanded = false
-        persistTimerState()
-    }
-
-    fun restart() {
-        engine.shuffle()
-        moveCount = 0
-        remainingSeconds = initialChallengeSeconds
-        totalChallengeSeconds = initialChallengeSeconds
-        stopwatchElapsedSeconds = 0
-        clockMode = PuzzleClockMode.COUNTDOWN
-        timerStarted = false
-        timerRunning = false
-        timerExpanded = false
-        timeExpired = false
-        isSolved = false
-        celebratingTileIds = emptySet()
-        celebrationMessage = null
-        completionDetailsVisible = false
-        refreshConnectionState()
-        boardVersion++
-        scope.launch {
-            settings.saveSession(
-                level.id,
-                activeGridSize,
-                engine.getCurrentPositions(),
-                0,
-                remainingSeconds,
-                PuzzleClockMode.COUNTDOWN,
-                0,
-                false,
-                totalChallengeSeconds
-            )
-        }
-    }
-
-    // Warm cream backdrop: calm enough for long play sessions while keeping the artwork vivid.
-    val gameBackground = Brush.verticalGradient(
-        colors = listOf(
-            Color(0xFFFFF7E8),
-            Color(0xFFF9EEDB),
-            Color(0xFFF3E6D2)
-        )
-    )
-
-    BoxWithConstraints(
-        modifier = modifier
-            .fillMaxSize()
-            .background(gameBackground)
-            .padding(horizontal = 2.dp)
-    ) {
-        /*
-         * Constant-layout timer architecture:
-         * The puzzle board NEVER moves when the timer opens or closes. We permanently
-         * reserve the same header depth used by the expanded/running timer state, then
-         * render the timer as a morphing overlay inside that space. This keeps every tile
-         * at the exact same screen coordinate throughout timer interactions.
-         */
-        val timerPanelVisible = timerExpanded && !timeExpired
-        val boardTopZone = 212.dp
-        val bottomZone = 126.dp
-        val boardAspect = 1.28f // portrait board without excessive vertical stretching
-        val horizontalBoardSpace = (maxWidth - 8.dp).coerceAtLeast(220.dp)
-        val verticalBoardSpace = (maxHeight - boardTopZone - bottomZone - 8.dp).coerceAtLeast(260.dp)
-        val widthAllowedByHeight = verticalBoardSpace / boardAspect
-        val boardWidth = minOf(horizontalBoardSpace, widthAllowedByHeight)
-        val boardHeight = boardWidth * boardAspect
-        val connectionProgress = if (totalConnections == 0) 0f
-        else (connectionCount.toFloat() / totalConnections.toFloat()).coerceIn(0f, 1f)
-
-        // TOP SAFE HUD: one stateful timer control + a non-layout timer morph stage.
-        // The stage is intentionally a fixed overlay. Expanding/collapsing it never changes
-        // boardTopZone, so the puzzle remains perfectly stationary.
-        Box(
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .fillMaxWidth()
-                .height(boardTopZone)
-                .statusBarsPadding()
-                .padding(top = 10.dp, start = 10.dp, end = 10.dp)
-        ) {
-            Box(modifier = Modifier.fillMaxWidth()) {
-                Surface(
-                    modifier = Modifier.align(Alignment.CenterStart),
-                    shape = CircleShape,
-                    color = Color(0xFFFFFBF3).copy(alpha = 0.96f)
-                ) {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            tint = Color(0xFF354A46)
-                        )
-                    }
-                }
-
-                Column(
-                    modifier = Modifier.align(Alignment.Center),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(
-                        "Chapter ${level.id} · ${level.title}",
-                        modifier = Modifier.widthIn(max = 205.dp),
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = Color(0xFF2E403D),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        "$activeGridSize×$activeGridSize · ${level.difficulty.shortLabel} · Par $parMoves moves",
-                        modifier = Modifier.widthIn(max = 220.dp),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color(0xFF746E63),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-
-                Surface(
-                    modifier = Modifier.align(Alignment.CenterEnd),
-                    shape = CircleShape,
-                    color = if (timerRunning) Color(0xFF2F7779) else Color(0xFFFFFBF3).copy(alpha = 0.96f),
-                    tonalElevation = 3.dp,
-                    shadowElevation = 4.dp
-                ) {
-                    IconButton(
-                        onClick = {
-                            when {
-                                timerRunning -> pauseAndCollapseTimer()
-                                timerExpanded && !timerStarted -> timerExpanded = false
-                                else -> openOrResumeTimer()
-                            }
-                        },
-                        enabled = initialized && !isSolved && !timeExpired
-                    ) {
-                        Icon(
-                            imageVector = if (timerRunning) Icons.Default.Pause else Icons.Default.Timer,
-                            contentDescription = if (timerRunning) "Pause challenge timer" else "Open challenge timer",
-                            tint = if (timerRunning) Color.White else Color(0xFF354A46)
-                        )
-                    }
-                }
-            }
-
-            /*
-             * "Magic bloat" timer morph:
-             * - transformOrigin is near the top-right timer icon
-             * - spring growth makes the card feel like it blooms from the icon
-             * - reverse scale/fade visually folds it back into the same control
-             * - because this is an overlay, it contributes zero layout displacement
-             */
-            AnimatedVisibility(
-                visible = timerPanelVisible,
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(top = 62.dp),
-                enter = fadeIn(animationSpec = tween(170)) +
-                    scaleIn(
-                        animationSpec = spring(
-                            dampingRatio = 0.92f,
-                            stiffness = Spring.StiffnessMediumLow
-                        ),
-                        initialScale = 0.84f,
-                        transformOrigin = TransformOrigin(0.94f, 0.08f)
-                    ),
-                exit = fadeOut(animationSpec = tween(150)) +
-                    scaleOut(
-                        animationSpec = tween(
-                            durationMillis = 240,
-                            easing = FastOutSlowInEasing
-                        ),
-                        targetScale = 0.84f,
-                        transformOrigin = TransformOrigin(0.94f, 0.08f)
-                    )
+    BoxWithConstraints(modifier.fillMaxSize().background(pleasantSkyBlue).safeDrawingPadding()) {
+        val largeText = LocalDensity.current.fontScale > 1.3f
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 4.dp, vertical = 6.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth(0.92f)
-                        .widthIn(max = 334.dp)
-                        .height(72.dp)
-                        .border(
-                            1.dp,
-                            Color(0xFF7C9F98).copy(alpha = 0.30f),
-                            RoundedCornerShape(14.dp)
-                        ),
-                    shape = RoundedCornerShape(14.dp),
-                    color = if (remainingSeconds <= 60) Color(0xFFFFEEE7) else Color(0xFFFFFCF7),
-                    tonalElevation = 0.dp,
-                    shadowElevation = 3.dp
+                IconButton(
+                    onClick = { vm.saveAndLeave(onBack) },
+                    modifier = Modifier.size(40.dp)
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 8.dp, vertical = 7.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = Color(0xFFF2E8D8)
-                        ) {
-                            TextButton(
-                                onClick = { adjustChallengeTime(-30) },
-                                enabled = initialized && !isSolved && remainingSeconds > 30,
-                                modifier = Modifier
-                                    .width(46.dp)
-                                    .height(38.dp)
-                            ) {
-                                Text(
-                                    "−30",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = Color(0xFF344B46)
-                                )
-                            }
-                        }
-
-                        Column(
-                            modifier = Modifier
-                                .width(104.dp)
-                                .clickable(
-                                    enabled = initialized && !isSolved,
-                                    onClick = { pauseAndCollapseTimer() }
-                                )
-                                .padding(vertical = 1.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
-                        ) {
-                            Text(
-                                formatChallengeTime(remainingSeconds),
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Black,
-                                color = if (remainingSeconds <= 60) {
-                                    MaterialTheme.colorScheme.onErrorContainer
-                                } else {
-                                    Color(0xFF285F5D)
-                                },
-                                maxLines = 1
-                            )
-                            Text(
-                                "TOTAL ${formatChallengeTime(totalChallengeSeconds)}",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF7B746B),
-                                maxLines = 1
-                            )
-                        }
-
-                        Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = Color(0xFFF2E8D8)
-                        ) {
-                            TextButton(
-                                onClick = { adjustChallengeTime(30) },
-                                enabled = initialized && !isSolved,
-                                modifier = Modifier
-                                    .width(46.dp)
-                                    .height(38.dp)
-                            ) {
-                                Text(
-                                    "+30",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = Color(0xFF344B46)
-                                )
-                            }
-                        }
-
-                        Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = if (timerRunning) Color(0xFF2F7779) else Color(0xFFE6F0EB)
-                        ) {
-                            IconButton(
-                                onClick = {
-                                    if (timerRunning) pauseAndCollapseTimer() else startTimer()
-                                },
-                                enabled = initialized && !isSolved,
-                                modifier = Modifier.size(40.dp)
-                            ) {
-                                Icon(
-                                    imageVector = if (timerRunning) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                    contentDescription = if (timerRunning) "Pause timer" else "Play timer",
-                                    tint = if (timerRunning) Color.White else Color(0xFF2E625F),
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                        }
-
-                        Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = Color(0xFFF5ECE0)
-                        ) {
-                            IconButton(
-                                onClick = { resetChallengeTimer() },
-                                enabled = initialized && !isSolved,
-                                modifier = Modifier.size(40.dp)
-                            ) {
-                                Icon(
-                                    Icons.Default.Refresh,
-                                    contentDescription = "Reset timer",
-                                    tint = Color(0xFF6D6158),
-                                    modifier = Modifier.size(19.dp)
-                                )
-                            }
-                        }
-                    }
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Save and go back")
                 }
+                CompactStatCard("TIME", formatPlayTime(ui.elapsedMillis), Modifier.weight(1f), softPanel)
+                CompactStatCard("MOVES", "${ui.moves}", Modifier.weight(1f), softPanel)
+                CompactStatCard("TARGET", "${CoinRewards.parMoves(gridSize)}", Modifier.weight(1f), softPanel)
+                CompactCoinCard(wallet, Modifier.weight(1f), softPanel) { rewardInfo = true }
             }
-        }
-
-        // CENTER: portrait rectangular puzzle board. Logical grids remain 4×4–8×8, but cells
-        // are rectangular so the artwork uses more of a phone's vertical canvas.
-        Surface(
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .offset(y = boardTopZone)
-                .width(boardWidth + 6.dp)
-                .height(boardHeight + 6.dp),
-            shape = RoundedCornerShape(13.dp),
-            color = Color(0xFFFFF8EC),
-            tonalElevation = 2.dp,
-            shadowElevation = 10.dp
-        ) {
-            Box(
-                modifier = Modifier.padding(2.dp),
-                contentAlignment = Alignment.Center
+            Surface(
+                Modifier.fillMaxWidth().aspectRatio(0.94f),
+                shape = RoundedCornerShape(18.dp),
+                tonalElevation = 2.dp,
+                shadowElevation = 3.dp
             ) {
-                when {
-                    !initialized || imageLoading || puzzleImage == null -> Box(
-                        Modifier.width(boardWidth).height(boardHeight),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            CircularProgressIndicator()
-                            if (imageSource == ImageSourceMode.PEXELS) {
-                                Spacer(Modifier.height(12.dp))
-                                Text("Preparing your puzzle…", style = MaterialTheme.typography.bodySmall)
-                            }
+                Box(Modifier.fillMaxSize().padding(4.dp), contentAlignment = Alignment.Center) {
+                    when {
+                        ui.loading -> CircularProgressIndicator()
+                        ui.error != null -> Column(Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(ui.error!!)
+                            Button(onClick = vm::load) { Text("Try again") }
                         }
-                    }
-
-                    !isSolved -> {
-                        val loaded = puzzleImage!!
-                        Box(
-                            modifier = Modifier.width(boardWidth).height(boardHeight),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            PuzzleBoard(
-                                engine = engine,
-                                boardVersion = boardVersion,
-                                image = loaded.bitmap.asImageBitmap(),
-                                celebratingTileIds = celebratingTileIds,
-                                celebrationVersion = celebrationVersion,
-                                onGroupDropped = { anchorTileId, targetPosition ->
-                                    val beforeConnections = engine.getCorrectConnections()
-
-                                    if (engine.attemptMoveGroup(anchorTileId, targetPosition)) {
-                                        moveCount++
-                                        val afterConnections = engine.getCorrectConnections()
-                                        val newlyCreated = afterConnections - beforeConnections
-                                        val gainedProgress = afterConnections.size > beforeConnections.size
-
-                                        connectionCount = afterConnections.size
-
-                                        val solvedNow = engine.isSolved()
-                                        isSolved = solvedNow
-                                        boardVersion++
-
-                                        if (solvedNow) {
-                                            timerRunning = false
-                                            timerExpanded = false
-                                            celebratingTileIds = (0 until engine.getTotalTiles()).toSet()
-                                            celebrationVersion++
-                                            if (soundEnabled) feedback.playSolvedSound()
-                                            if (hapticsEnabled) feedback.buzzForSolved()
-                                        } else if (gainedProgress && newlyCreated.isNotEmpty()) {
-                                            val newTileIds = newlyCreated
-                                                .flatMap { listOf(it.firstTileId, it.secondTileId) }
-                                                .toSet()
-                                            showConnectionCelebration(newTileIds, newlyCreated.size)
-                                            if (soundEnabled) feedback.playConnectionSound()
-                                            if (hapticsEnabled) feedback.buzzForConnection()
-                                        }
-
-                                        scope.launch {
-                                            if (solvedNow) {
-                                                settings.markLevelCompleted(level.id)
-                                                settings.clearSession()
-                                            } else {
-                                                settings.saveSession(
-                                                    level.id,
-                                                    activeGridSize,
-                                                    engine.getCurrentPositions(),
-                                                    moveCount,
-                                                    remainingSeconds,
-                                                    PuzzleClockMode.COUNTDOWN,
-                                                    0,
-                                                    timerStarted,
-                                                    totalChallengeSeconds
-                                                )
-                                            }
-                                        }
+                        ui.solved && ui.celebration.isEmpty() && ui.image != null -> Image(ui.image!!.bitmap.asImageBitmap(), "Completed picture",
+                            Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
+                        ui.image != null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            PuzzleBoard(vm.engine, ui.boardVersion, ui.image!!.bitmap.asImageBitmap(),
+                                ui.celebration, ui.celebrationVersion,
+                                onGroupDropped = { anchor, target ->
+                                    when (vm.drop(anchor, target)) {
+                                        1 -> { if (soundEnabled) feedback.playConnectionSound(); if (hapticsEnabled) feedback.buzzForConnection() }
+                                        2 -> { if (soundEnabled) feedback.playSolvedSound(); if (hapticsEnabled) feedback.buzzForSolved() }
                                     }
-                                },
+                                }, modifier = Modifier.fillMaxSize(), inputEnabled = !ui.solved && (!ui.started || ui.running))
+                            MergePraiseOverlay(
+                                mergeSize = ui.celebration.size,
+                                celebrationVersion = ui.celebrationVersion,
+                                solved = ui.solved,
                                 modifier = Modifier.fillMaxSize()
                             )
-
-                            CelebrationBanner(
-                                message = celebrationMessage,
-                                modifier = Modifier
-                                    .align(Alignment.TopCenter)
-                                    .padding(top = 12.dp)
-                            )
-                        }
-                    }
-
-                    else -> {
-                        val loaded = puzzleImage!!
-                        val score = calculatePuzzleScore(
-                            gridSize = activeGridSize,
-                            totalConnections = totalConnections,
-                            moves = moveCount,
-                            remainingSeconds = remainingSeconds,
-                            clockMode = clockMode,
-                            stopwatchElapsedSeconds = stopwatchElapsedSeconds,
-                            targetSeconds = totalChallengeSeconds
-                        )
-                        Box(modifier = Modifier.width(boardWidth).height(boardHeight)) {
-                            Image(
-                                bitmap = loaded.bitmap.asImageBitmap(),
-                                contentDescription = "Completed chapter artwork",
-                                modifier = Modifier.fillMaxSize(),
-                                contentScale = ContentScale.Crop
-                            )
-
-                            CompletionResultOverlay(
-                                visible = completionDetailsVisible,
-                                score = score,
-                                moves = moveCount,
-                                remainingSeconds = remainingSeconds,
-                                totalChallengeSeconds = totalChallengeSeconds,
-                                clockMode = clockMode,
-                                stopwatchElapsedSeconds = stopwatchElapsedSeconds,
-                                chapterNumber = level.id,
-                                nextChapterTitle = PuzzleLevel.getLevel(level.id + 1)?.title,
-                                nextChapterDifficulty = PuzzleLevel.getLevel(level.id + 1)?.difficulty?.displayLabel,
-                                nextChapterGrid = PuzzleLevel.getLevel(level.id + 1)?.gridDescription,
-                                isLastChapter = level.id >= PuzzleLevel.maxLevelId,
-                                onNext = { onNextLevel(level.id + 1) },
-                                onFinish = onHome,
-                                modifier = Modifier.align(Alignment.Center)
-                            )
                         }
                     }
                 }
             }
-        }
-
-        // BOTTOM ~1 INCH: progress + low-priority controls. Kept visually quiet so the image wins.
-        val progressDeckShape = RoundedCornerShape(26.dp)
-        Surface(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .padding(bottom = 10.dp, start = 10.dp, end = 10.dp)
-                .border(1.dp, Color(0xFFE6D8C6), progressDeckShape),
-            shape = progressDeckShape,
-            color = Color(0xFFFFFCF7).copy(alpha = 0.99f),
-            tonalElevation = 4.dp,
-            shadowElevation = 6.dp
-        ) {
-            Column(
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                if (!isSolved) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column {
-                            Text(
-                                "Picture progress",
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color(0xFF303B37)
-                            )
-                            Text(
-                                "$connectionCount of $totalConnections connections · $moveCount moves",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color(0xFF6C6B63)
-                            )
-                        }
+            Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp),
+                color = softPanel) {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Completion", style = MaterialTheme.typography.labelLarge)
+                        Text("${(progress * 100).toInt()}%", style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                    }
+                    LinearProgressIndicator(progress = { animatedProgress },
+                        modifier = Modifier.fillMaxWidth().height(6.dp),
+                        trackColor = Color.White)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         OutlinedButton(
-                            onClick = { restart() },
-                            enabled = initialized && !imageLoading
+                            onClick = { if (ui.running) vm.pause() else vm.resume() },
+                            enabled = !ui.loading && !ui.solved && ui.image != null,
+                            modifier = Modifier.weight(1f).heightIn(min = 48.dp)
                         ) {
-                            Text("Reshuffle")
-                        }
-                    }
-
-                    Spacer(Modifier.height(6.dp))
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(7.dp)
-                            .background(
-                                Color(0xFFE9E0D4),
-                                CircleShape
-                            )
-                    ) {
-                        if (connectionProgress > 0f) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth(connectionProgress)
-                                    .height(7.dp)
-                                    .background(Color(0xFF4F9DA0), CircleShape)
-                            )
-                        }
-                    }
-                } else if (!completionDetailsVisible) {
-                    Text(
-                        "Take it in ✨",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Text(
-                        "Your completed picture is on display",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                } else {
-                    Text(
-                        "Chapter restored ✨",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-
-                puzzleImage?.let { loaded ->
-                    loaded.attribution?.let { credit ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.Center,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            TextButton(onClick = {
-                                runCatching { uriHandler.openUri(credit.photoUrl) }
-                            }) {
-                                Text(
-                                    "Photo by ${credit.photographer} · Pexels",
-                                    style = MaterialTheme.typography.labelSmall
-                                )
+                            if (!largeText) {
+                                Icon(if (ui.running) Icons.Default.Pause else Icons.Default.PlayArrow, null, Modifier.size(18.dp))
+                                Spacer(Modifier.width(6.dp))
                             }
-                            if (!isSolved) {
-                                IconButton(onClick = { refreshToken++ }) {
-                                    Icon(Icons.Default.Refresh, contentDescription = "Load another photo")
-                                }
-                            }
+                            Text(when {
+                                ui.running -> "Pause"
+                                ui.started -> "Resume"
+                                else -> "Start"
+                            })
                         }
-                    }
-
-                    if (loaded.usedFallback && !loaded.message.isNullOrBlank()) {
-                        Text(
-                            text = loaded.message,
-                            modifier = Modifier.fillMaxWidth(),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        OutlinedButton(onClick = { vm.pause(); confirmRestart = true },
+                            enabled = !ui.loading && !ui.solved && ui.image != null,
+                            modifier = Modifier.weight(1f).heightIn(min = 48.dp)) {
+                            if (!largeText) {
+                                Icon(Icons.Default.Refresh, null, Modifier.size(18.dp))
+                                Spacer(Modifier.width(6.dp))
+                            }
+                            Text("Restart")
+                        }
                     }
                 }
             }
+            ui.image?.attribution?.let { credit ->
+                TextButton(onClick = { vm.pause(); runCatching { uri.openUri(credit.photoUrl) } }) {
+                    Text("Photo: ${credit.photographer} · Pexels", maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.labelSmall)
+                }
+            }
+            if (ui.saveError) {
+                Text("Progress hasn’t been saved yet. Please retry before leaving.", color = MaterialTheme.colorScheme.error)
+                OutlinedButton(onClick = vm::retrySave) { Text("Retry save") }
+            }
+            if (ui.solved && ui.receipt == null && !ui.saveError) Text("Saving your coins…")
+            if (ui.receipt != null) Button(onClick = { resultsVisible = true }) { Text("View earned coins") }
+            Spacer(Modifier.height(8.dp))
         }
     }
-
-    if (timeExpired) {
-        AlertDialog(
-            onDismissRequest = { },
-            title = { Text("Time’s up ⏱") },
-            text = {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("This countdown attempt has ended. Restart the puzzle to try again.")
-                    Spacer(Modifier.height(14.dp))
-                    Text(
-                        "00:00",
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.error
-                    )
-                }
-            },
-            confirmButton = {
-                Button(onClick = { restart() }) { Text("Restart puzzle") }
-            },
-            dismissButton = {
-                TextButton(onClick = onHome) { Text("Home") }
-            }
-        )
+    if (resultsVisible && ui.receipt != null) Dialog(onDismissRequest = { resultsVisible = false }) {
+        Column(Modifier.verticalScroll(rememberScrollState())) {
+            RewardCard(ui.receipt!!.awarded, ui.receipt!!.reward.completion, ui.receipt!!.reward.speed,
+                ui.receipt!!.reward.efficiency, ui.elapsedMillis, ui.moves, ui.speedEligible,
+                nextLabel = if (levelId == PuzzleLevel.maxLevelId) "Finish journey" else "Next discovery",
+                onNext = { if (levelId == PuzzleLevel.maxLevelId) onHome() else onNextLevel(levelId + 1) })
+        }
     }
-}
-
-private fun recommendedParMoves(gridSize: Int, totalConnections: Int): Int =
-    gridSize * gridSize + totalConnections / 2
-
-private fun defaultChallengeSeconds(gridSize: Int, totalConnections: Int): Int {
-    val parMoves = recommendedParMoves(gridSize, totalConnections)
-    return (parMoves * 6).coerceAtLeast(3 * 60)
-}
-
-private fun formatChallengeTime(totalSeconds: Int): String {
-    val safe = totalSeconds.coerceAtLeast(0)
-    val minutes = safe / 60
-    val seconds = safe % 60
-    return "%02d:%02d".format(minutes, seconds)
-}
-
-private fun calculatePuzzleScore(
-    gridSize: Int,
-    totalConnections: Int,
-    moves: Int,
-    remainingSeconds: Int,
-    clockMode: PuzzleClockMode,
-    stopwatchElapsedSeconds: Int,
-    targetSeconds: Int
-): Int {
-    val baseScore = gridSize * gridSize * 250 + totalConnections * 100
-    val movePenalty = moves * 15
-    val timeBonus = when (clockMode) {
-        PuzzleClockMode.COUNTDOWN -> remainingSeconds.coerceAtLeast(0) * 5
-        PuzzleClockMode.STOPWATCH -> (targetSeconds - stopwatchElapsedSeconds).coerceAtLeast(0) * 3
-    }
-    return (baseScore + timeBonus - movePenalty).coerceAtLeast(gridSize * gridSize * 50)
+    if (confirmRestart) AlertDialog(onDismissRequest = { confirmRestart = false },
+        title = { Text("Start this picture again?") },
+        text = { Text("This attempt’s moves and time will reset. Your collected coins are safe.") },
+        confirmButton = { TextButton(onClick = { confirmRestart = false; vm.restart() }) { Text("Restart") } },
+        dismissButton = { TextButton(onClick = { confirmRestart = false }) { Text("Keep playing") } })
+    if (rewardInfo) AlertDialog(onDismissRequest = { rewardInfo = false },
+        title = { Text("Your picture coins") },
+        text = { Text("Aim for ${formatPlayTime(CoinRewards.targetSeconds(gridSize) * 1000L)} and ${CoinRewards.parMoves(gridSize)} moves in this puzzle. Earn coins for finishing, speed, and efficient moves. On a replay, earn the improvement over your previous best. Coins are a local game reward with no cash value.") },
+        confirmButton = { TextButton(onClick = { rewardInfo = false }) { Text("Got it") } })
 }
 
 @Composable
-private fun CompletionResultOverlay(
-    visible: Boolean,
-    score: Int,
-    moves: Int,
-    remainingSeconds: Int,
-    totalChallengeSeconds: Int,
-    clockMode: PuzzleClockMode,
-    stopwatchElapsedSeconds: Int,
-    chapterNumber: Int,
-    nextChapterTitle: String?,
-    nextChapterDifficulty: String?,
-    nextChapterGrid: String?,
-    isLastChapter: Boolean,
-    onNext: () -> Unit,
-    onFinish: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    AnimatedVisibility(
-        visible = visible,
-        modifier = modifier,
-        enter = fadeIn(animationSpec = tween(260)) + scaleIn(initialScale = 0.90f),
-        exit = fadeOut()
-    ) {
-        Surface(
-            shape = RoundedCornerShape(24.dp),
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
-            tonalElevation = 10.dp,
-            shadowElevation = 12.dp
-        ) {
-            Column(
-                modifier = Modifier.padding(horizontal = 30.dp, vertical = 24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    "✨ Chapter $chapterNumber Complete!",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(Modifier.height(10.dp))
-                Text(
-                    text = score.toString(),
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Text("JOURNEY SCORE", style = MaterialTheme.typography.labelMedium)
-                Spacer(Modifier.height(8.dp))
-                Text("Solved in $moves moves", style = MaterialTheme.typography.bodyMedium)
-                Text(
-                    if (clockMode == PuzzleClockMode.COUNTDOWN) {
-                        val consumed = (totalChallengeSeconds - remainingSeconds).coerceAtLeast(0)
-                        "${formatChallengeTime(remainingSeconds)} left · ${formatChallengeTime(consumed)} used"
-                    } else {
-                        "Completed in ${formatChallengeTime(stopwatchElapsedSeconds)}"
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Spacer(Modifier.height(18.dp))
-                if (!isLastChapter) {
-                    nextChapterTitle?.let {
-                        Text(
-                            text = "Next: Chapter ${chapterNumber + 1} · $it",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        if (nextChapterGrid != null && nextChapterDifficulty != null) {
-                            Spacer(Modifier.height(4.dp))
-                            Text(
-                                text = "$nextChapterGrid  •  $nextChapterDifficulty",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                        Spacer(Modifier.height(10.dp))
-                    }
-                    Button(onClick = onNext) { Text("Continue to Chapter ${chapterNumber + 1}") }
-                } else {
-                    Text(
-                        "You restored every picture in the journey ✨",
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                    Spacer(Modifier.height(10.dp))
-                    Button(onClick = onFinish) { Text("Finish Journey") }
-                }
-            }
+fun CoinPill(coins: Int, onClick: () -> Unit = {}) {
+    Surface(onClick = onClick, modifier = Modifier.heightIn(min = 48.dp).semantics(mergeDescendants = true) {
+        contentDescription = "$coins gold coins. Reward details"
+    }, shape = CircleShape, color = MaterialTheme.colorScheme.tertiaryContainer) {
+        Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            GoldCoinIcon()
+            Spacer(Modifier.width(4.dp))
+            Text("$coins", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onTertiaryContainer)
         }
     }
 }
 
 @Composable
-private fun CelebrationBanner(
-    message: String?,
+private fun CompactStatCard(
+    label: String,
+    value: String,
+    modifier: Modifier,
+    background: Color
+) {
+    Surface(modifier.heightIn(min = 48.dp), shape = RoundedCornerShape(14.dp), color = background) {
+        Column(
+            Modifier.padding(horizontal = 4.dp, vertical = 6.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(value, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, maxLines = 1)
+            Text(label, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
+@Composable
+private fun CompactCoinCard(
+    coins: Int,
+    modifier: Modifier,
+    background: Color,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        modifier = modifier.heightIn(min = 48.dp).semantics(mergeDescendants = true) {
+            contentDescription = "$coins gold coins. Reward details"
+        },
+        shape = RoundedCornerShape(14.dp),
+        color = background
+    ) {
+        Column(
+            Modifier.padding(horizontal = 4.dp, vertical = 6.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                GoldCoinIcon(Modifier.size(16.dp))
+                Text("$coins", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, maxLines = 1)
+            }
+            Text("COINS", style = MaterialTheme.typography.labelSmall, maxLines = 1)
+        }
+    }
+}
+@Composable
+private fun RewardCard(awarded: Int, base: Int, speed: Int, movesBonus: Int, elapsed: Long, moves: Int,
+    speedEligible: Boolean, nextLabel: String, onNext: () -> Unit) {
+    var coinTarget by remember(awarded) { mutableIntStateOf(0) }
+    LaunchedEffect(awarded) { coinTarget = awarded }
+    val animatedCoins by animateIntAsState(coinTarget,
+        animationSpec = androidx.compose.animation.core.tween(750), label = "earned-coins")
+    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
+        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("Picture complete!", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                GoldCoinIcon(Modifier.size(32.dp))
+                Text("+$animatedCoins coins", style = MaterialTheme.typography.headlineMedium,
+                    color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.ExtraBold)
+            }
+            Text("${formatPlayTime(elapsed)} active time · $moves moves")
+            Text("Completion $base  +  Speed $speed  +  Moves $movesBonus", style = MaterialTheme.typography.bodySmall)
+            if (!speedEligible) Text("This older save has no reliable time record, so no speed bonus applies.", style = MaterialTheme.typography.bodySmall)
+            if (awarded < base + speed + movesBonus) Text("Replay coins reflect the improvement over your best for this puzzle.", style = MaterialTheme.typography.bodySmall)
+            Button(onClick = onNext, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text(nextLabel) }
+        }
+    }
+}
+
+@Composable
+private fun MergePraiseOverlay(
+    mergeSize: Int,
+    celebrationVersion: Int,
+    solved: Boolean,
     modifier: Modifier = Modifier
 ) {
-    AnimatedVisibility(
-        visible = message != null,
-        modifier = modifier,
-        enter = fadeIn() + scaleIn(initialScale = 0.82f),
-        exit = fadeOut() + scaleOut(targetScale = 0.92f)
-    ) {
-        Surface(
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.96f),
-            tonalElevation = 8.dp,
-            shadowElevation = 8.dp
+    val praise = mergePraiseWord(mergeSize, solved) ?: return
+    val alpha = remember(celebrationVersion, praise) { Animatable(0f) }
+    val scale = remember(celebrationVersion, praise) { Animatable(0.74f) }
+
+    LaunchedEffect(celebrationVersion, praise) {
+        alpha.snapTo(0f)
+        scale.snapTo(0.74f)
+        coroutineScope {
+            launch {
+                alpha.animateTo(1f, tween(120, easing = FastOutSlowInEasing))
+                delay(220)
+                alpha.animateTo(0f, tween(520, easing = FastOutSlowInEasing))
+            }
+            launch {
+                scale.animateTo(1.10f, tween(150, easing = FastOutSlowInEasing))
+                scale.animateTo(1.00f, tween(170, easing = FastOutSlowInEasing))
+                delay(260)
+                scale.animateTo(1.03f, tween(220, easing = FastOutSlowInEasing))
+            }
+        }
+    }
+
+    Box(modifier, contentAlignment = Alignment.Center) {
+        Box(
+            Modifier.graphicsLayer {
+                this.alpha = alpha.value
+                scaleX = scale.value
+                scaleY = scale.value
+            },
+            contentAlignment = Alignment.Center
         ) {
+            val fontSize = when {
+                praise.length >= 11 -> 29.sp
+                praise.length >= 9 -> 32.sp
+                else -> 36.sp
+            }
+            val outline = Color(0xFF9E3D18)
+            val fill = Color(0xFFFFF8E9)
+            val shadow = Color(0x6627130A)
+            val outlineOffsets = listOf(
+                -2.dp to -2.dp, 0.dp to -2.dp, 2.dp to -2.dp,
+                -2.dp to 0.dp, 2.dp to 0.dp,
+                -2.dp to 2.dp, 0.dp to 2.dp, 2.dp to 2.dp
+            )
+
             Text(
-                text = message.orEmpty(),
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSecondaryContainer
+                text = praise,
+                color = shadow,
+                fontSize = fontSize,
+                fontWeight = FontWeight.Black,
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                modifier = Modifier.offset(x = 1.dp, y = 4.dp)
+            )
+            outlineOffsets.forEach { (x, y) ->
+                Text(
+                    text = praise,
+                    color = outline,
+                    fontSize = fontSize,
+                    fontWeight = FontWeight.Black,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    modifier = Modifier.offset(x = x, y = y)
+                )
+            }
+            Text(
+                text = praise,
+                color = fill,
+                fontSize = fontSize,
+                fontWeight = FontWeight.Black,
+                textAlign = TextAlign.Center,
+                maxLines = 1
             )
         }
     }
 }
 
+private fun mergePraiseWord(mergeSize: Int, solved: Boolean): String? = when {
+    solved && mergeSize >= 4 -> "MASTERPIECE!"
+    mergeSize >= 13 -> "PERFECT!"
+    mergeSize >= 9 -> "AMAZING!"
+    mergeSize >= 6 -> "GREAT!"
+    mergeSize >= 4 -> "NICE!"
+    else -> null
+}
+
+internal fun formatPlayTime(millis: Long): String {
+    val seconds = millis.coerceAtLeast(0) / 1000
+    return "%02d:%02d".format(seconds / 60, seconds % 60)
+}

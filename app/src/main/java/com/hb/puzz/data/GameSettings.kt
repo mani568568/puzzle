@@ -1,280 +1,157 @@
 package com.hb.puzz.data
 
 import android.content.Context
-import androidx.datastore.preferences.core.booleanPreferencesKey
-import androidx.datastore.preferences.core.edit
-import androidx.datastore.preferences.core.intPreferencesKey
-import androidx.datastore.preferences.core.stringPreferencesKey
-import androidx.datastore.preferences.core.stringSetPreferencesKey
+import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
 import com.hb.puzz.data.images.ImageSourceMode
 import com.hb.puzz.data.images.PexelsPhotoMeta
+import com.hb.puzz.domain.CoinReward
+import com.hb.puzz.domain.CoinRewards
 import com.hb.puzz.domain.PuzzleLevel
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import org.json.JSONObject
+import java.util.UUID
 
 private val Context.picturePuzzleDataStore by preferencesDataStore(name = "cozy_blocks_settings")
-
-/** Persisted in-progress picture-puzzle session. */
-enum class PuzzleClockMode(val storedValue: String) {
-    COUNTDOWN("countdown"),
-    STOPWATCH("stopwatch");
-
-    companion object {
-        fun fromStored(value: String?): PuzzleClockMode =
-            values().firstOrNull { it.storedValue == value } ?: COUNTDOWN
-    }
-}
+enum class PuzzleClockMode { COUNTDOWN, STOPWATCH }
 
 data class PuzzleSession(
     val levelId: Int,
     val gridSize: Int,
     val positions: IntArray,
     val moveCount: Int,
-    val remainingSeconds: Int? = null,
-    val clockMode: PuzzleClockMode = PuzzleClockMode.COUNTDOWN,
-    val stopwatchElapsedSeconds: Int = 0,
-    val timerStarted: Boolean = false,
-    val totalChallengeSeconds: Int? = null
+    val elapsedMillis: Long = 0,
+    val sessionId: String = UUID.randomUUID().toString(),
+    val imageSource: ImageSourceMode? = null,
+    val started: Boolean = false,
+    // Old saves never measured elapsed play reliably; they receive completion/move rewards only.
+    val speedEligible: Boolean = true,
+    val imageIdentity: String? = null
 )
 
-/** Single source of truth for picture-puzzle progress and user preferences. */
+data class HomeSnapshot(val highest: Int, val completed: Set<Int>, val saved: PuzzleSession?,
+    val coins: Int, val sound: Boolean, val haptics: Boolean, val dark: Boolean, val source: ImageSourceMode)
+
+data class CompletionReceipt(val reward: CoinReward, val awarded: Int, val balance: Int)
+
 class GameSettings(context: Context) {
-    private val dataStore = context.applicationContext.picturePuzzleDataStore
+    private val store = context.applicationContext.picturePuzzleDataStore
+    private val sessionKey = stringPreferencesKey("session_v2")
+    private val completedKey = stringSetPreferencesKey("completed_levels")
+    private val highestKey = intPreferencesKey("highest_level")
+    private val coinsKey = intPreferencesKey("coin_balance_v1")
+    private val soundKey = booleanPreferencesKey("sound_enabled")
+    private val hapticsKey = booleanPreferencesKey("haptics_enabled")
+    private val darkKey = booleanPreferencesKey("dark_theme")
+    private val sourceKey = stringPreferencesKey("image_source")
 
-    companion object {
-        private val KEY_COMPLETED_LEVELS = stringSetPreferencesKey("completed_levels")
-        private val KEY_HIGHEST_LEVEL = intPreferencesKey("highest_level")
-        private val KEY_SOUND_ENABLED = booleanPreferencesKey("sound_enabled")
-        private val KEY_HAPTICS_ENABLED = booleanPreferencesKey("haptics_enabled")
-        private val KEY_DARK_THEME = booleanPreferencesKey("dark_theme")
-        private val KEY_IMAGE_SOURCE = stringPreferencesKey("image_source")
-
-        private val KEY_SAVED_LEVEL = intPreferencesKey("saved_level")
-        private val KEY_SAVED_GRID_SIZE = intPreferencesKey("saved_grid_size")
-        private val KEY_SAVED_POSITIONS = stringPreferencesKey("saved_positions")
-        private val KEY_SAVED_MOVES = intPreferencesKey("saved_moves")
-        private val KEY_SAVED_REMAINING_SECONDS = intPreferencesKey("saved_remaining_seconds")
-        private val KEY_SAVED_CLOCK_MODE = stringPreferencesKey("saved_clock_mode")
-        private val KEY_SAVED_STOPWATCH_SECONDS = intPreferencesKey("saved_stopwatch_seconds")
-        private val KEY_SAVED_TIMER_STARTED = booleanPreferencesKey("saved_timer_started")
-        private val KEY_SAVED_TOTAL_CHALLENGE_SECONDS = intPreferencesKey("saved_total_challenge_seconds")
-
-        private fun encodePositions(positions: IntArray): String = positions.joinToString(",")
-
-        private fun decodePositions(value: String): IntArray? {
-            if (value.isBlank()) return null
-            return runCatching {
-                value.split(',').map { it.toInt() }.toIntArray()
-            }.getOrNull()
-        }
+    val homeFlow = store.data.map { p -> HomeSnapshot(
+        (p[highestKey] ?: 1).coerceIn(1, PuzzleLevel.maxLevelId),
+        (p[completedKey] ?: emptySet()).mapNotNull(String::toIntOrNull).toSet(), decodeSession(p),
+        p[coinsKey] ?: 0, p[soundKey] ?: true, p[hapticsKey] ?: true, p[darkKey] ?: false,
+        p[sourceKey]?.let(ImageSourceMode::fromStored) ?: ImageSourceMode.PRELOADED) }
+    val completedLevelsFlow = store.data.map { (it[completedKey] ?: emptySet()).mapNotNull(String::toIntOrNull).toSet() }
+    val highestLevelFlow = store.data.map { (it[highestKey] ?: 1).coerceIn(1, PuzzleLevel.maxLevelId) }
+    val coinBalanceFlow = store.data.map { it[coinsKey] ?: 0 }
+    val soundEnabledFlow = store.data.map { it[soundKey] ?: true }
+    val hapticsEnabledFlow = store.data.map { it[hapticsKey] ?: true }
+    val darkThemeFlow = store.data.map { it[darkKey] ?: false }
+    val imageSourceFlow = store.data.map {
+        it[sourceKey]?.let(ImageSourceMode::fromStored) ?: ImageSourceMode.PRELOADED
     }
+    val savedSessionFlow = store.data.map(::decodeSession)
+    suspend fun loadSession() = decodeSession(store.data.first())
 
-    val completedLevelsFlow: Flow<Set<Int>> = dataStore.data.map { prefs ->
-        (prefs[KEY_COMPLETED_LEVELS] ?: emptySet()).mapNotNull { it.toIntOrNull() }.toSet()
-    }
-
-    val highestLevelFlow: Flow<Int> = dataStore.data.map { prefs ->
-        (prefs[KEY_HIGHEST_LEVEL] ?: 1).coerceIn(1, PuzzleLevel.maxLevelId)
-    }
-
-    val soundEnabledFlow: Flow<Boolean> = dataStore.data.map { it[KEY_SOUND_ENABLED] ?: true }
-    val hapticsEnabledFlow: Flow<Boolean> = dataStore.data.map { it[KEY_HAPTICS_ENABLED] ?: true }
-    val darkThemeFlow: Flow<Boolean> = dataStore.data.map { it[KEY_DARK_THEME] ?: false }
-    val imageSourceFlow: Flow<ImageSourceMode> = dataStore.data.map { prefs ->
-        ImageSourceMode.fromStored(prefs[KEY_IMAGE_SOURCE])
-    }
-
-    val savedSessionFlow: Flow<PuzzleSession?> = dataStore.data.map { prefs ->
-        decodeSession(
-            levelId = prefs[KEY_SAVED_LEVEL],
-            gridSize = prefs[KEY_SAVED_GRID_SIZE],
-            positionsText = prefs[KEY_SAVED_POSITIONS],
-            moveCount = prefs[KEY_SAVED_MOVES] ?: 0,
-            remainingSeconds = prefs[KEY_SAVED_REMAINING_SECONDS],
-            clockMode = prefs[KEY_SAVED_CLOCK_MODE],
-            stopwatchElapsedSeconds = prefs[KEY_SAVED_STOPWATCH_SECONDS] ?: 0,
-            timerStarted = prefs[KEY_SAVED_TIMER_STARTED] ?: false,
-            totalChallengeSeconds = prefs[KEY_SAVED_TOTAL_CHALLENGE_SECONDS]
-        )
-    }
-
-    suspend fun loadSession(): PuzzleSession? {
-        val prefs = dataStore.data.first()
-        return decodeSession(
-            levelId = prefs[KEY_SAVED_LEVEL],
-            gridSize = prefs[KEY_SAVED_GRID_SIZE],
-            positionsText = prefs[KEY_SAVED_POSITIONS],
-            moveCount = prefs[KEY_SAVED_MOVES] ?: 0,
-            remainingSeconds = prefs[KEY_SAVED_REMAINING_SECONDS],
-            clockMode = prefs[KEY_SAVED_CLOCK_MODE],
-            stopwatchElapsedSeconds = prefs[KEY_SAVED_STOPWATCH_SECONDS] ?: 0,
-            timerStarted = prefs[KEY_SAVED_TIMER_STARTED] ?: false,
-            totalChallengeSeconds = prefs[KEY_SAVED_TOTAL_CHALLENGE_SECONDS]
-        )
-    }
-
-    private fun decodeSession(
-        levelId: Int?,
-        gridSize: Int?,
-        positionsText: String?,
-        moveCount: Int,
-        remainingSeconds: Int?,
-        clockMode: String?,
-        stopwatchElapsedSeconds: Int,
-        timerStarted: Boolean,
-        totalChallengeSeconds: Int?
-    ): PuzzleSession? {
-        val id = levelId ?: return null
+    private fun decodeSession(p: Preferences): PuzzleSession? = runCatching {
+        val json = p[sessionKey]?.let(::JSONObject)
+        val id = json?.getInt("level") ?: p[intPreferencesKey("saved_level")] ?: return null
         val level = PuzzleLevel.getLevel(id) ?: return null
-        val positions = positionsText?.let(::decodePositions) ?: return null
+        val raw = json?.getString("positions") ?: p[stringPreferencesKey("saved_positions")] ?: return null
+        val positions = raw.split(',').map(String::toInt).toIntArray()
+        val grid = json?.getInt("grid") ?: p[intPreferencesKey("saved_grid_size")]
+            ?: kotlin.math.sqrt(positions.size.toDouble()).toInt()
+        if (!level.acceptsGridSize(grid) || positions.size != grid * grid ||
+            positions.toSet().size != positions.size || positions.any { it !in positions.indices }) return null
+        PuzzleSession(id, grid, positions,
+            (json?.optInt("moves") ?: p[intPreferencesKey("saved_moves")] ?: 0).coerceAtLeast(0),
+            json?.optLong("elapsed")?.coerceAtLeast(0) ?: 0,
+            json?.getString("id") ?: UUID.randomUUID().toString(),
+            json?.optString("source")?.takeIf { it.isNotBlank() }?.let(ImageSourceMode::fromStored),
+            json?.optBoolean("started") ?: false,
+            json?.optBoolean("speedEligible", true) ?: false,
+            json?.optString("imageIdentity")?.takeIf { it.isNotBlank() })
+    }.getOrNull()
 
-        // Backward compatibility: older saves did not persist grid size. Infer it from the tile count.
-        val inferredGridSize = kotlin.math.sqrt(positions.size.toDouble()).toInt()
-            .takeIf { it * it == positions.size }
-        val resolvedGridSize = gridSize ?: inferredGridSize ?: return null
-
-        if (!level.acceptsGridSize(resolvedGridSize)) return null
-        if (positions.size != resolvedGridSize * resolvedGridSize) return null
-        if (positions.toSet().size != positions.size) return null
-        if (positions.any { it !in positions.indices }) return null
-        return PuzzleSession(
-            id,
-            resolvedGridSize,
-            positions,
-            moveCount.coerceAtLeast(0),
-            remainingSeconds?.coerceAtLeast(0),
-            PuzzleClockMode.fromStored(clockMode),
-            stopwatchElapsedSeconds.coerceAtLeast(0),
-            timerStarted,
-            totalChallengeSeconds?.coerceAtLeast(0)
-        )
+    suspend fun saveSession(s: PuzzleSession) {
+        require(PuzzleLevel.requireLevel(s.levelId).acceptsGridSize(s.gridSize))
+        require(s.positions.size == s.gridSize * s.gridSize && s.positions.toSet().size == s.positions.size)
+        require(s.positions.all { it in s.positions.indices })
+        store.edit { p -> p[sessionKey] = encode(s); removeLegacySession(p) }
     }
+    private fun encode(s: PuzzleSession) = JSONObject().apply {
+        put("level", s.levelId); put("grid", s.gridSize); put("positions", s.positions.joinToString(","))
+        put("moves", s.moveCount); put("elapsed", s.elapsedMillis); put("id", s.sessionId)
+        put("source", s.imageSource?.storedValue ?: ""); put("started", s.started)
+        put("speedEligible", s.speedEligible); put("imageIdentity", s.imageIdentity ?: "")
+    }.toString()
 
-    suspend fun saveSession(
-        levelId: Int,
-        gridSize: Int,
-        positions: IntArray,
-        moveCount: Int,
-        remainingSeconds: Int? = null,
-        clockMode: PuzzleClockMode = PuzzleClockMode.COUNTDOWN,
-        stopwatchElapsedSeconds: Int = 0,
-        timerStarted: Boolean = false,
-        totalChallengeSeconds: Int? = null
-    ) {
-        val level = PuzzleLevel.getLevel(levelId) ?: return
-        if (!level.acceptsGridSize(gridSize)) return
-        if (positions.size != gridSize * gridSize) return
-        if (positions.toSet().size != positions.size || positions.any { it !in positions.indices }) return
+    private fun removeLegacySession(p: MutablePreferences) {
+        p.asMap().keys.filter { it.name.startsWith("saved_") }.forEach { p.remove(it) }
+    }
+    suspend fun clearSession() { store.edit { it.remove(sessionKey); removeLegacySession(it) } }
 
-        dataStore.edit { prefs ->
-            prefs[KEY_SAVED_LEVEL] = levelId
-            prefs[KEY_SAVED_GRID_SIZE] = gridSize
-            prefs[KEY_SAVED_POSITIONS] = encodePositions(positions)
-            prefs[KEY_SAVED_MOVES] = moveCount.coerceAtLeast(0)
-            prefs[KEY_SAVED_CLOCK_MODE] = clockMode.storedValue
-            prefs[KEY_SAVED_STOPWATCH_SECONDS] = stopwatchElapsedSeconds.coerceAtLeast(0)
-            prefs[KEY_SAVED_TIMER_STARTED] = timerStarted
-            if (totalChallengeSeconds != null) {
-                prefs[KEY_SAVED_TOTAL_CHALLENGE_SECONDS] = totalChallengeSeconds.coerceAtLeast(0)
-            } else {
-                prefs.remove(KEY_SAVED_TOTAL_CHALLENGE_SECONDS)
+    /** Wallet, chapter progress, best reward, receipt and session clearing commit together. */
+    suspend fun completeSession(s: PuzzleSession): CompletionReceipt {
+        require(s.positions.indices.all { s.positions[it] == it })
+        val calculated = CoinRewards.calculate(s.gridSize, s.elapsedMillis, s.moveCount)
+        val reward = if (s.speedEligible) calculated else calculated.copy(speed = 0)
+        var receipt: CompletionReceipt? = null
+        store.edit { p ->
+            val receiptKey = stringPreferencesKey("coin_receipt_${s.levelId}")
+            val previous = p[receiptKey]?.let(::JSONObject)
+            if (previous?.optString("session") == s.sessionId) {
+                receipt = CompletionReceipt(reward, previous.getInt("awarded"), p[coinsKey] ?: 0)
+                if (decodeSession(p)?.sessionId == s.sessionId) p.remove(sessionKey)
+                return@edit
             }
-            if (remainingSeconds != null) {
-                prefs[KEY_SAVED_REMAINING_SECONDS] = remainingSeconds.coerceAtLeast(0)
-            } else {
-                prefs.remove(KEY_SAVED_REMAINING_SECONDS)
-            }
+            val bestKey = intPreferencesKey("best_coins_${s.levelId}")
+            val award = CoinRewards.improvement(p[bestKey] ?: 0, reward)
+            val balance = (p[coinsKey] ?: 0) + award
+            p[bestKey] = maxOf(p[bestKey] ?: 0, reward.total)
+            p[coinsKey] = balance
+            p[receiptKey] = JSONObject().put("session", s.sessionId).put("awarded", award).toString()
+            p[completedKey] = (p[completedKey] ?: emptySet()) + s.levelId.toString()
+            p[highestKey] = maxOf(p[highestKey] ?: 1, (s.levelId + 1).coerceAtMost(PuzzleLevel.maxLevelId))
+            // Never clear an unrelated newer session.
+            if (decodeSession(p)?.sessionId == s.sessionId) p.remove(sessionKey)
+            removeLegacySession(p)
+            receipt = CompletionReceipt(reward, award, balance)
         }
+        return checkNotNull(receipt)
     }
 
-    suspend fun clearSession() {
-        dataStore.edit { prefs ->
-            prefs.remove(KEY_SAVED_LEVEL)
-            prefs.remove(KEY_SAVED_GRID_SIZE)
-            prefs.remove(KEY_SAVED_POSITIONS)
-            prefs.remove(KEY_SAVED_MOVES)
-            prefs.remove(KEY_SAVED_REMAINING_SECONDS)
-            prefs.remove(KEY_SAVED_CLOCK_MODE)
-            prefs.remove(KEY_SAVED_STOPWATCH_SECONDS)
-            prefs.remove(KEY_SAVED_TIMER_STARTED)
-            prefs.remove(KEY_SAVED_TOTAL_CHALLENGE_SECONDS)
-        }
-    }
-
-    suspend fun markLevelCompleted(levelId: Int) {
-        if (PuzzleLevel.getLevel(levelId) == null) return
-        dataStore.edit { prefs ->
-            val completed = prefs[KEY_COMPLETED_LEVELS] ?: emptySet()
-            prefs[KEY_COMPLETED_LEVELS] = completed + levelId.toString()
-
-            val unlocked = (levelId + 1).coerceAtMost(PuzzleLevel.maxLevelId)
-            val currentHighest = prefs[KEY_HIGHEST_LEVEL] ?: 1
-            if (unlocked > currentHighest) prefs[KEY_HIGHEST_LEVEL] = unlocked
-        }
-    }
-
-    suspend fun updateSoundEnabled(enabled: Boolean) {
-        dataStore.edit { it[KEY_SOUND_ENABLED] = enabled }
-    }
-
-    suspend fun updateHapticsEnabled(enabled: Boolean) {
-        dataStore.edit { it[KEY_HAPTICS_ENABLED] = enabled }
-    }
-
-    suspend fun updateDarkTheme(enabled: Boolean) {
-        dataStore.edit { it[KEY_DARK_THEME] = enabled }
-    }
-
-    suspend fun updateImageSource(mode: ImageSourceMode) {
-        dataStore.edit { it[KEY_IMAGE_SOURCE] = mode.storedValue }
-    }
-
-    suspend fun loadPexelsPhoto(levelId: Int): PexelsPhotoMeta? {
-        val prefs = dataStore.data.first()
-        val id = prefs[stringPreferencesKey("pexels_${levelId}_id")]?.toLongOrNull() ?: return null
-        val imageUrl = prefs[stringPreferencesKey("pexels_${levelId}_image_url")] ?: return null
-        val photoUrl = prefs[stringPreferencesKey("pexels_${levelId}_photo_url")] ?: return null
-        val photographer = prefs[stringPreferencesKey("pexels_${levelId}_photographer")] ?: "Pexels photographer"
-        val photographerUrl = prefs[stringPreferencesKey("pexels_${levelId}_photographer_url")] ?: ""
-        return PexelsPhotoMeta(id, imageUrl, photoUrl, photographer, photographerUrl)
-    }
-
-    suspend fun savePexelsPhoto(levelId: Int, photo: PexelsPhotoMeta) {
-        dataStore.edit { prefs ->
-            prefs[stringPreferencesKey("pexels_${levelId}_id")] = photo.id.toString()
-            prefs[stringPreferencesKey("pexels_${levelId}_image_url")] = photo.imageUrl
-            prefs[stringPreferencesKey("pexels_${levelId}_photo_url")] = photo.photoUrl
-            prefs[stringPreferencesKey("pexels_${levelId}_photographer")] = photo.photographer
-            prefs[stringPreferencesKey("pexels_${levelId}_photographer_url")] = photo.photographerUrl
-        }
-    }
-
-    suspend fun clearPexelsPhoto(levelId: Int) {
-        dataStore.edit { prefs ->
-            prefs.remove(stringPreferencesKey("pexels_${levelId}_id"))
-            prefs.remove(stringPreferencesKey("pexels_${levelId}_image_url"))
-            prefs.remove(stringPreferencesKey("pexels_${levelId}_photo_url"))
-            prefs.remove(stringPreferencesKey("pexels_${levelId}_photographer"))
-            prefs.remove(stringPreferencesKey("pexels_${levelId}_photographer_url"))
-        }
-    }
-
-    /** Clears game progress and saved puzzle only; user preference toggles are preserved. */
+    suspend fun updateSoundEnabled(v: Boolean) { store.edit { it[soundKey] = v } }
+    suspend fun updateHapticsEnabled(v: Boolean) { store.edit { it[hapticsKey] = v } }
+    suspend fun updateDarkTheme(v: Boolean) { store.edit { it[darkKey] = v } }
+    suspend fun updateImageSource(v: ImageSourceMode) { store.edit { it[sourceKey] = v.storedValue } }
     suspend fun resetProgress() {
-        dataStore.edit { prefs ->
-            prefs.remove(KEY_COMPLETED_LEVELS)
-            prefs.remove(KEY_HIGHEST_LEVEL)
-            prefs.remove(KEY_SAVED_LEVEL)
-            prefs.remove(KEY_SAVED_GRID_SIZE)
-            prefs.remove(KEY_SAVED_POSITIONS)
-            prefs.remove(KEY_SAVED_MOVES)
-            prefs.remove(KEY_SAVED_REMAINING_SECONDS)
-            prefs.remove(KEY_SAVED_CLOCK_MODE)
-            prefs.remove(KEY_SAVED_STOPWATCH_SECONDS)
-            prefs.remove(KEY_SAVED_TIMER_STARTED)
-            prefs.remove(KEY_SAVED_TOTAL_CHALLENGE_SECONDS)
+        store.edit { p -> p.remove(completedKey); p.remove(highestKey); p.remove(sessionKey); removeLegacySession(p) }
+    }
+    // Wallet and personal bests intentionally survive journey reset, preventing duplicate rewards.
+    suspend fun loadPexelsPhoto(levelId: Int): PexelsPhotoMeta? {
+        val p = store.data.first()
+        fun value(suffix: String) = p[stringPreferencesKey("pexels_${levelId}_$suffix")]
+        return PexelsPhotoMeta(value("id")?.toLongOrNull() ?: return null,
+            value("image_url") ?: return null, value("photo_url") ?: return null,
+            value("photographer") ?: "Pexels photographer", value("photographer_url") ?: "")
+    }
+    suspend fun savePexelsPhoto(levelId: Int, photo: PexelsPhotoMeta) {
+        store.edit { p ->
+            mapOf("id" to photo.id.toString(), "image_url" to photo.imageUrl, "photo_url" to photo.photoUrl,
+                "photographer" to photo.photographer, "photographer_url" to photo.photographerUrl).forEach { (suffix, value) ->
+                p[stringPreferencesKey("pexels_${levelId}_$suffix")] = value
+            }
         }
     }
 }
