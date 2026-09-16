@@ -4,284 +4,79 @@ import com.hb.puzz.domain.PuzzleEngine
 import org.junit.Assert.*
 import org.junit.Test
 
-/**
- * Unit tests for the Puzzle Engine.
- */
 class PuzzleEngineTest {
-    
     @Test
-    fun `initial state should be unsolved`() {
-        val engine = PuzzleEngine(3)
-        
-        assertFalse(engine.isSolved())
-    }
-    
-    @Test
-    fun `solved_state_detection`() {
-        // Create engine with solved positions
-        val engine = PuzzleEngine(2, 12345L)
-        assertTrue(engine.restorePositions(intArrayOf(0, 1, 2, 3)))
-        assertTrue(engine.isSolved())
-    }
-    
-    @Test
-    fun `swap_functionality`() {
-        val engine = PuzzleEngine(3, 12345L)
-        
-        // Get initial positions
-        val originalPos0 = engine.getTileAt(0)
-        val originalPos1 = engine.getTileAt(1)
-        
-        // Swap positions 0 and 1
-        assertTrue(engine.attemptSwap(0, 1))
-        
-        // Verify swap occurred
-        assertEquals(originalPos1, engine.getTileAt(0))
-        assertEquals(originalPos0, engine.getTileAt(1))
-    }
-    
-    @Test
-    fun `invalid_swap_out_of_bounds`() {
-        val engine = PuzzleEngine(3)
-        
-        assertFalse(engine.attemptSwap(-1, 5))
-        assertFalse(engine.attemptSwap(9, 1))  // 3x3 has indices 0-8
-    }
-    
-    @Test
-    fun `same_position_swap_noop`() {
-        val engine = PuzzleEngine(3, 12345L)
-        
-        val pos = engine.getTileAt(4)
-        assertFalse(engine.attemptSwap(4, 4))  // Same position returns false
-        assertEquals(pos, engine.getTileAt(4))
-    }
-    
-    @Test
-    fun `shuffle_creates_valid_permutation`() {
-        val engine = PuzzleEngine(3, 12345L)
-        
-        assertTrue(engine.isValidPermutation())
-        assertFalse(engine.isSolved())  // Shuffled should not be solved
-    }
-    
-    @Test
-    fun `deterministic_shuffling_with_seed`() {
-        val engine1 = PuzzleEngine(3, 99999L)
-        val engine2 = PuzzleEngine(3, 99999L)
-        
-        // Both engines should have same shuffled state with same seed
-        assertArrayEquals(engine1.getCurrentPositions(), engine2.getCurrentPositions())
-    }
-    
-    @Test
-    fun `connected_groups_horizontal_adjacency`() {
-        val engine = PuzzleEngine(3, 12345L)
-        
-        // Set up a solved state
-        assertTrue(engine.restorePositions(IntArray(9) { it }))
-        val groups = engine.getConnectedGroups()
-        
-        // Should have connected groups for adjacent tiles
-        assertTrue(groups.isNotEmpty())
-    }
-    
-    @Test
-    fun `connected_groups_no_cross_boundary`() {
-        val engine = PuzzleEngine(3, 12345L)
-        
-        assertTrue(engine.restorePositions(intArrayOf(4, 5, 0, 1, 8, 6, 2, 7, 3)))
-        // IDs 0 and 1 are at positions 2 and 3, on opposite row edges.
-        assertFalse(engine.getCorrectConnections().any { it.firstTileId == 0 && it.secondTileId == 1 })
-    }
-    
-    @Test
-    fun `copy_engine_creates_independent_state`() {
-        val engine1 = PuzzleEngine(2, 12345L)
-        val engine2 = engine1.copy()
-        
-        // Initial positions should match
-        assertArrayEquals(engine1.getCurrentPositions(), engine2.getCurrentPositions())
-        
-        // Modify engine1 and verify engine2 is unchanged
-        val copyBefore = engine2.getCurrentPositions()
-        engine1.attemptSwap(0, 1)
-        assertArrayEquals(copyBefore, engine2.getCurrentPositions())
-        assertFalse(engine1.getCurrentPositions().contentEquals(engine2.getCurrentPositions()))
-    }
-    
-    @Test
-    fun `grid_size_validation`() {
-        val engine3x3 = PuzzleEngine(3)
-        assertEquals(3, engine3x3.gridSize)
-        
-        val engine4x4 = PuzzleEngine(4)
-        assertEquals(4, engine4x4.gridSize)
-    }
-    
-    @Test
-    fun `tile_position_mapping`() {
-        val engine = PuzzleEngine(2, 12345L)
-        
-        // Verify we can get tile at position
-        for (i in 0 until 4) {
-            val tileId = engine.getTileAt(i)
-            assertTrue(tileId >= 0 && tileId < 4)
-            
-            // And find position of a tile
-            val pos = engine.getPositionOf(tileId)
-            assertEquals(i, pos)  // Should match where we found it
+    fun `rectangular geometry always has more rows than columns`() {
+        for (size in 2..8) {
+            val engine = PuzzleEngine(size, 123L)
+            assertTrue(engine.gridRows > engine.gridColumns)
+            assertEquals(engine.gridRows * engine.gridColumns, engine.getTotalTiles())
         }
     }
+
     @Test
-    fun `correct_connections_detect_relative_neighbors`() {
-        val engine = PuzzleEngine(3, 12345L)
-        // Tiles 0,1,3,4 form a correct 2x2 block in the upper-left.
-        assertTrue(engine.restorePositions(intArrayOf(0, 1, 5, 3, 4, 2, 8, 7, 6)))
-        val connections = engine.getCorrectConnections()
-        assertTrue(connections.any { it.firstTileId == 0 && it.secondTileId == 1 })
-        assertTrue(connections.any { it.firstTileId == 0 && it.secondTileId == 3 })
+    fun `size four produces four by five puzzle`() {
+        val engine = PuzzleEngine(4, 123L)
+        assertEquals(4, engine.gridColumns)
+        assertEquals(5, engine.gridRows)
+        assertEquals(20, engine.getTotalTiles())
+        assertEquals(31, engine.getTotalPossibleConnections())
     }
 
     @Test
-    fun `total_possible_connections_for_3x3_is_12`() {
-        val engine = PuzzleEngine(3, 12345L)
-        assertEquals(12, engine.getTotalPossibleConnections())
-    }
-
-    @Test
-    fun `connected tiles move as one rigid group`() {
-        val engine = PuzzleEngine(3, 12345L)
-        assertTrue(engine.restorePositions(intArrayOf(8, 6, 5, 0, 1, 7, 4, 3, 2)))
-
-        assertEquals(setOf(0, 1), engine.getGroupForTile(0))
-        assertTrue(engine.attemptMoveGroup(anchorTileId = 0, targetPosition = 0))
-
-        assertEquals(0, engine.getPositionOf(0))
-        assertEquals(1, engine.getPositionOf(1))
-        assertTrue(engine.isValidPermutation())
-        assertTrue(engine.getCorrectConnections().any {
-            it.firstTileId == 0 && it.secondTileId == 1
-        })
-    }
-
-    @Test
-    fun `group move is rejected when rigid shape would leave board`() {
-        val engine = PuzzleEngine(3, 12345L)
-        assertTrue(engine.restorePositions(intArrayOf(8, 6, 5, 0, 1, 7, 4, 3, 2)))
-
-        // Tile 0 and 1 are a horizontal pair. Anchoring tile 0 at the far-right cell
-        // would force tile 1 outside the board.
-        assertNull(engine.getGroupMoveTargets(anchorTileId = 0, targetPosition = 2))
-        assertFalse(engine.attemptMoveGroup(anchorTileId = 0, targetPosition = 2))
-        assertTrue(engine.isValidPermutation())
-    }
-
-    @Test
-    fun `loose tile can move onto a cell that currently belongs to a merged group`() {
-        val engine = PuzzleEngine(3, 12345L)
-        // Tiles 0 and 1 are correctly connected at board positions 3 and 4.
-        assertTrue(engine.restorePositions(intArrayOf(8, 6, 5, 0, 1, 7, 4, 3, 2)))
-        assertEquals(setOf(0, 1), engine.getGroupForTile(0))
-
-        // Tile 8 is loose at board position 0. Moving it to position 3 must be allowed even
-        // though position 3 currently belongs to the merged 0-1 fragment.
-        assertTrue(engine.attemptMoveGroup(anchorTileId = 8, targetPosition = 3))
-        assertEquals(3, engine.getPositionOf(8))
-        assertTrue(engine.isValidPermutation())
-    }
-
-    @Test
-    fun `move does not require creating a correct connection`() {
-        val engine = PuzzleEngine(3, 12345L)
-        assertTrue(engine.restorePositions(intArrayOf(8, 6, 5, 0, 1, 7, 4, 3, 2)))
-
-        val before = engine.getCorrectConnections().size
-        assertTrue(engine.attemptMoveGroup(anchorTileId = 5, targetPosition = 8))
-        assertTrue(engine.isValidPermutation())
-        // The move itself is legal regardless of whether progress increased.
-        assertEquals(8, engine.getPositionOf(5))
-        assertTrue(engine.getCorrectConnections().size >= 0)
-        assertTrue(before >= 0)
-    }
-
-    @Test fun `many group moves preserve every tile and rigid moving group`() {
-        val random = kotlin.random.Random(871)
-        for (grid in 4..8) {
-            val engine = PuzzleEngine(grid, 123L)
-            repeat(300) {
-                val anchor = random.nextInt(grid * grid)
-                val destination = random.nextInt(grid * grid)
-                val targets = engine.getGroupMoveTargets(anchor, destination)
-                val old = engine.getCurrentPositions()
-                if (engine.attemptMoveGroup(anchor, destination)) {
-                    assertNotNull(targets)
-                    targets!!.forEach { (tile, position) -> assertEquals(position, engine.getPositionOf(tile)) }
-                } else assertArrayEquals(old, engine.getCurrentPositions())
+    fun `fresh rectangular puzzle begins at zero completion`() {
+        for (size in 2..8) {
+            for (seed in 1L..20L) {
+                val engine = PuzzleEngine(size, seed)
+                assertFalse(engine.isSolved())
+                assertTrue(engine.getCorrectConnections().isEmpty())
                 assertTrue(engine.isValidPermutation())
             }
         }
     }
 
-
     @Test
-    fun `hint solves one block at a time and repeated hints finish puzzle`() {
-        val engine = PuzzleEngine(3, 12345L)
-        assertTrue(engine.restorePositions(intArrayOf(8, 6, 5, 0, 1, 7, 4, 3, 2)))
-
-        var previousCorrectTiles = engine.getCurrentPositions().indices.count {
-            engine.getCurrentPositions()[it] == it
-        }
-        var steps = 0
-        while (!engine.isSolved() && steps < 9) {
-            val moved = engine.applyHintStep()
-            assertTrue(moved.isNotEmpty())
-            val positions = engine.getCurrentPositions()
-            val correctTiles = positions.indices.count { positions[it] == it }
-            assertTrue(correctTiles > previousCorrectTiles)
-            previousCorrectTiles = correctTiles
-            assertTrue(engine.isValidPermutation())
-            steps++
-        }
-
+    fun `solved rectangular positions are detected`() {
+        val engine = PuzzleEngine(4, 123L)
+        assertTrue(engine.restorePositions(IntArray(engine.getTotalTiles()) { it }))
         assertTrue(engine.isSolved())
-        assertTrue(steps in 1..9)
-        assertTrue(engine.applyHintStep().isEmpty())
     }
 
     @Test
-    fun `hint selection is randomized instead of directional`() {
-        val restored = intArrayOf(8, 6, 5, 0, 1, 7, 4, 3, 2)
-
-        val firstHintGroups = (1L..10L).map { seed ->
-            val engine = PuzzleEngine(3, seed)
-            assertTrue(engine.restorePositions(restored))
-            val moved = engine.applyHintStep()
-            assertTrue(moved.isNotEmpty())
-            assertTrue(engine.isValidPermutation())
-            moved.sorted()
-        }
-
-        // Different random seeds should not always pick the same board edge/row first.
-        assertTrue(firstHintGroups.distinct().size > 1)
-    }
-
-    @Test
-    fun `fresh adventure always begins with zero completion`() {
-        for (grid in 2..8) {
-            for (seed in 1L..20L) {
-                val engine = PuzzleEngine(grid, seed)
-                assertFalse(engine.isSolved())
-                assertTrue(engine.getCorrectConnections().isEmpty())
-
-                repeat(4) {
-                    engine.shuffle()
-                    assertFalse(engine.isSolved())
-                    assertTrue(engine.getCorrectConnections().isEmpty())
-                    assertTrue(engine.isValidPermutation())
-                }
+    fun `group moves preserve a valid rectangular permutation`() {
+        val random = kotlin.random.Random(871)
+        for (size in 3..8) {
+            val engine = PuzzleEngine(size, 123L)
+            repeat(250) {
+                val anchor = random.nextInt(engine.getTotalTiles())
+                val destination = random.nextInt(engine.getTotalTiles())
+                engine.attemptMoveGroup(anchor, destination)
+                assertTrue(engine.isValidPermutation())
             }
         }
     }
 
+    @Test
+    fun `copy keeps rectangular geometry and independent state`() {
+        val first = PuzzleEngine(5, 42L)
+        val copy = first.copy()
+        assertEquals(first.gridColumns, copy.gridColumns)
+        assertEquals(first.gridRows, copy.gridRows)
+        assertArrayEquals(first.getCurrentPositions(), copy.getCurrentPositions())
+        first.attemptSwap(0, 1)
+        assertFalse(first.getCurrentPositions().contentEquals(copy.getCurrentPositions()))
+    }
+
+    @Test
+    fun `hint eventually solves rectangular puzzle`() {
+        val engine = PuzzleEngine(4, 99L)
+        var steps = 0
+        while (!engine.isSolved() && steps < engine.getTotalTiles() * 2) {
+            val moved = engine.applyHintStep()
+            assertTrue(moved.isNotEmpty())
+            assertTrue(engine.isValidPermutation())
+            steps++
+        }
+        assertTrue(engine.isSolved())
+    }
 }

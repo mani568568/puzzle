@@ -8,7 +8,7 @@ import org.junit.Test
 
 class PuzzleLevelTest {
     @Test
-    fun `first five chapters are 4x4`() {
+    fun `first five chapters use size four rectangular preset`() {
         (1..5).forEach { id ->
             val level = PuzzleLevel.requireLevel(id)
             assertEquals(4, level.gridSize)
@@ -17,7 +17,7 @@ class PuzzleLevelTest {
     }
 
     @Test
-    fun `progression reaches 8x8`() {
+    fun `progression reaches size eight rectangular preset`() {
         assertEquals(5, PuzzleLevel.requireLevel(6).gridSize)
         assertEquals(6, PuzzleLevel.requireLevel(9).gridSize)
         assertEquals(7, PuzzleLevel.requireLevel(12).gridSize)
@@ -45,7 +45,7 @@ class PuzzleLevelTest {
         assertEquals("Hard · Master Quest", PuzzleLevel.Difficulty.HARD.displayLabel)
     }
     @Test
-    fun `grid shift allows at most two easier sizes and never below 2x2`() {
+    fun `grid shift allows at most two easier rectangular presets and never below size two`() {
         val easy = PuzzleLevel.requireLevel(1)
         assertTrue(easy.acceptsSessionGridSize(4, 3))
         assertTrue(easy.acceptsSessionGridSize(4, 2))

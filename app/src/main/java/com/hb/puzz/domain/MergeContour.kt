@@ -7,19 +7,19 @@ internal data class ContourPoint(val x: Int, val y: Int)
  * Closed, ordered contours around occupied cells, including holes. Shared edges are omitted.
  * Keeping the occupied cell on the right gives a deterministic clockwise outer boundary.
  */
-internal fun mergeContours(positions: Set<Int>, gridSize: Int): List<List<ContourPoint>> {
-    require(gridSize > 0)
-    require(positions.all { it in 0 until gridSize * gridSize })
+internal fun mergeContours(positions: Set<Int>, gridColumns: Int, gridRows: Int): List<List<ContourPoint>> {
+    require(gridColumns > 0 && gridRows > 0)
+    require(positions.all { it in 0 until gridColumns * gridRows })
     data class Edge(val start: ContourPoint, val end: ContourPoint, val direction: Int)
     val edges = mutableListOf<Edge>()
     for (position in positions.sorted()) {
-        val x = position % gridSize
-        val y = position / gridSize
-        if (y == 0 || position - gridSize !in positions)
+        val x = position % gridColumns
+        val y = position / gridColumns
+        if (y == 0 || position - gridColumns !in positions)
             edges += Edge(ContourPoint(x, y), ContourPoint(x + 1, y), 0)
-        if (x == gridSize - 1 || position + 1 !in positions)
+        if (x == gridColumns - 1 || position + 1 !in positions)
             edges += Edge(ContourPoint(x + 1, y), ContourPoint(x + 1, y + 1), 1)
-        if (y == gridSize - 1 || position + gridSize !in positions)
+        if (y == gridRows - 1 || position + gridColumns !in positions)
             edges += Edge(ContourPoint(x + 1, y + 1), ContourPoint(x, y + 1), 2)
         if (x == 0 || position - 1 !in positions)
             edges += Edge(ContourPoint(x, y + 1), ContourPoint(x, y), 3)

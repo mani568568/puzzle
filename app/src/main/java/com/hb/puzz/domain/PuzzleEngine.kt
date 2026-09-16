@@ -13,7 +13,10 @@ class PuzzleEngine(
     val gridSize: Int,
     seed: Long? = null
 ) {
-    private val totalTiles: Int = gridSize * gridSize
+    /** Rectangle layout: columns are fewer than rows so the board is portrait rather than square. */
+    val gridColumns: Int = columnsForSize(gridSize)
+    val gridRows: Int = rowsForSize(gridSize)
+    private val totalTiles: Int = gridColumns * gridRows
     private val random = seed?.let { Random(it) } ?: Random.Default
     private var positions: IntArray = IntArray(totalTiles) { it }
 
@@ -50,14 +53,14 @@ class PuzzleEngine(
      * That guarantees no horizontal or vertical pair starts in its correct image orientation.
      */
     fun shuffle() {
-        val rowOrder = shuffledAxisWithoutForwardStep()
-        val colOrder = shuffledAxisWithoutForwardStep()
+        val rowOrder = shuffledAxisWithoutForwardStep(gridRows)
+        val colOrder = shuffledAxisWithoutForwardStep(gridColumns)
 
-        for (row in 0 until gridSize) {
-            for (col in 0 until gridSize) {
+        for (row in 0 until gridRows) {
+            for (col in 0 until gridColumns) {
                 val sourceRow = rowOrder[row]
                 val sourceCol = colOrder[col]
-                positions[row * gridSize + col] = sourceRow * gridSize + sourceCol
+                positions[row * gridColumns + col] = sourceRow * gridColumns + sourceCol
             }
         }
 
@@ -65,9 +68,9 @@ class PuzzleEngine(
         check(getCorrectConnections().isEmpty()) { "Fresh puzzle must start at zero completion" }
     }
 
-    private fun shuffledAxisWithoutForwardStep(): IntArray {
+    private fun shuffledAxisWithoutForwardStep(axisSize: Int): IntArray {
         repeat(64) {
-            val candidate = IntArray(gridSize) { it }
+            val candidate = IntArray(axisSize) { it }
             for (i in candidate.lastIndex downTo 1) {
                 val j = random.nextInt(i + 1)
                 val temp = candidate[i]
@@ -79,7 +82,7 @@ class PuzzleEngine(
             }
         }
         // Always valid for gridSize >= 2 and still produces zero forward-oriented neighbors.
-        return IntArray(gridSize) { gridSize - 1 - it }
+        return IntArray(axisSize) { axisSize - 1 - it }
     }
 
     fun getTileAt(position: Int): Int =
@@ -106,7 +109,7 @@ class PuzzleEngine(
     }
 
     /** Number of neighbor relationships present in a completely solved grid. */
-    fun getTotalPossibleConnections(): Int = 2 * gridSize * (gridSize - 1)
+    fun getTotalPossibleConnections(): Int = gridRows * (gridColumns - 1) + gridColumns * (gridRows - 1)
 
     /**
      * Returns every pair of tiles currently touching in the same orientation they have
@@ -120,15 +123,15 @@ class PuzzleEngine(
             val tileA = positions[posA]
             val tileB = positions[posB]
 
-            val tileARow = tileA / gridSize
-            val tileACol = tileA % gridSize
-            val tileBRow = tileB / gridSize
-            val tileBCol = tileB % gridSize
+            val tileARow = tileA / gridColumns
+            val tileACol = tileA % gridColumns
+            val tileBRow = tileB / gridColumns
+            val tileBCol = tileB % gridColumns
 
-            val posARow = posA / gridSize
-            val posACol = posA % gridSize
-            val posBRow = posB / gridSize
-            val posBCol = posB % gridSize
+            val posARow = posA / gridColumns
+            val posACol = posA % gridColumns
+            val posBRow = posB / gridColumns
+            val posBCol = posB % gridColumns
 
             if (
                 tileBRow - tileARow == posBRow - posARow &&
@@ -141,11 +144,11 @@ class PuzzleEngine(
             }
         }
 
-        for (row in 0 until gridSize) {
-            for (col in 0 until gridSize) {
-                val pos = row * gridSize + col
-                if (col + 1 < gridSize) inspect(pos, pos + 1)
-                if (row + 1 < gridSize) inspect(pos, pos + gridSize)
+        for (row in 0 until gridRows) {
+            for (col in 0 until gridColumns) {
+                val pos = row * gridColumns + col
+                if (col + 1 < gridColumns) inspect(pos, pos + 1)
+                if (row + 1 < gridRows) inspect(pos, pos + gridColumns)
             }
         }
 
@@ -208,10 +211,10 @@ class PuzzleEngine(
         val anchorPosition = getPositionOf(anchorTileId)
         if (anchorPosition < 0) return null
 
-        val anchorRow = anchorPosition / gridSize
-        val anchorCol = anchorPosition % gridSize
-        val targetRow = targetPosition / gridSize
-        val targetCol = targetPosition % gridSize
+        val anchorRow = anchorPosition / gridColumns
+        val anchorCol = anchorPosition % gridColumns
+        val targetRow = targetPosition / gridColumns
+        val targetCol = targetPosition % gridColumns
         val deltaRow = targetRow - anchorRow
         val deltaCol = targetCol - anchorCol
 
@@ -221,13 +224,13 @@ class PuzzleEngine(
         for (tileId in group) {
             val sourcePosition = getPositionOf(tileId)
             if (sourcePosition < 0) return null
-            val sourceRow = sourcePosition / gridSize
-            val sourceCol = sourcePosition % gridSize
+            val sourceRow = sourcePosition / gridColumns
+            val sourceCol = sourcePosition % gridColumns
             val movedRow = sourceRow + deltaRow
             val movedCol = sourceCol + deltaCol
 
-            if (movedRow !in 0 until gridSize || movedCol !in 0 until gridSize) return null
-            result[tileId] = movedRow * gridSize + movedCol
+            if (movedRow !in 0 until gridRows || movedCol !in 0 until gridColumns) return null
+            result[tileId] = movedRow * gridColumns + movedCol
         }
 
         // Movement is intentionally independent from merging. A loose tile or an already
@@ -314,5 +317,12 @@ class PuzzleEngine(
 
     fun copy(): PuzzleEngine = PuzzleEngine(gridSize).also {
         it.restorePositions(positions)
+    }
+
+    companion object {
+        /** Difficulty size N maps to an N x (N+1) portrait grid: one extra row. */
+        fun columnsForSize(gridSize: Int): Int = gridSize
+        fun rowsForSize(gridSize: Int): Int = gridSize + 1
+        fun tileCountForSize(gridSize: Int): Int = columnsForSize(gridSize) * rowsForSize(gridSize)
     }
 }

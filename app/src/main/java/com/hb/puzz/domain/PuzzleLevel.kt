@@ -9,7 +9,7 @@ data class PuzzleLevel(
     val gridSize: Int,
     val difficulty: Difficulty,
     val seed: Long? = null,
-    /** When set, a fresh chapter can choose any square grid size in this range. */
+    /** When set, a fresh chapter can choose any rectangular difficulty preset in this range. */
     val randomGridSizes: IntRange? = null
 ) {
     enum class Difficulty(
@@ -29,7 +29,7 @@ data class PuzzleLevel(
     /**
      * A saved/current session may temporarily use a Grid Shift up to two sizes below its base.
      * This keeps the same Adventure/image while making the puzzle easier with fewer, larger pieces
-     * such as 6×6 -> 5×5/4×4.
+     * such as 6×7 -> 5×6 / 4×5.
      */
     fun acceptsSessionGridSize(baseGridSize: Int, size: Int): Boolean =
         acceptsBaseGridSize(baseGridSize) &&
@@ -48,8 +48,12 @@ data class PuzzleLevel(
 
     val gridDescription: String
         get() = randomGridSizes?.let { range ->
-            "Surprise Grid · ${range.first}×${range.first}–${range.last}×${range.last}"
-        } ?: "${gridSize}×${gridSize} Grid"
+            val firstCols = PuzzleEngine.columnsForSize(range.first)
+            val firstRows = PuzzleEngine.rowsForSize(range.first)
+            val lastCols = PuzzleEngine.columnsForSize(range.last)
+            val lastRows = PuzzleEngine.rowsForSize(range.last)
+            "Surprise Grid · ${firstCols}×${firstRows}–${lastCols}×${lastRows}"
+        } ?: "${PuzzleEngine.columnsForSize(gridSize)}×${PuzzleEngine.rowsForSize(gridSize)} Grid"
 
     companion object {
         /** Keep tiles comfortably touchable and within the reward/performance model. */
@@ -58,13 +62,13 @@ data class PuzzleLevel(
 
         /**
          * Progression philosophy:
-         *  - Chapters 1–5: 4×4 so players learn the merge mechanic without tiny tiles.
-         *  - Chapters 6–8: 5×5.
-         *  - Chapters 9–11: 6×6.
-         *  - Chapters 12–14: 7×7.
-         *  - Chapter 15: first full 8×8 challenge.
-         *  - Chapters 16–19: surprise grids chosen from 6×6, 7×7, or 8×8 when the chapter starts.
-         *  - Chapter 20: fixed 8×8 finale.
+         *  - Chapters 1–5: 4×5 so players learn the merge mechanic without tiny tiles.
+         *  - Chapters 6–8: 5×6.
+         *  - Chapters 9–11: 6×7.
+         *  - Chapters 12–14: 7×8.
+         *  - Chapter 15: first full 8×9 challenge.
+         *  - Chapters 16–19: surprise rectangular grids based on sizes 6 through 8.
+         *  - Chapter 20: fixed 8×9 finale.
          */
         val ALL_LEVELS: List<PuzzleLevel> = listOf(
             PuzzleLevel(1, "Chipmunk", 4, Difficulty.EASY),

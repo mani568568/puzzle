@@ -66,6 +66,8 @@ class PuzzleGameViewModel(
     private var celebrationJob: Job? = null
     private var gridShiftBusy = false
     private var hintBusy = false
+    private var userPaused = false
+    private var pausedByLifecycle = false
 
     init {
         load()
@@ -122,6 +124,8 @@ class PuzzleGameViewModel(
                 if (!solvedOnLoad) {
                     // The timer starts automatically as soon as the Adventure is ready on screen.
                     // There is no separate Start action; Pause/Resume is the only timer control.
+                    userPaused = false
+                    pausedByLifecycle = false
                     clock.resume()
                     session = session.copy(started = true)
                 }
@@ -143,15 +147,40 @@ class PuzzleGameViewModel(
     fun resume() {
         val s = mutable.value
         if (s.loading || s.error != null || s.solved) return
+        userPaused = false
+        pausedByLifecycle = false
         clock.resume()
         session = session.copy(started = true)
-        mutable.value = s.copy(started = true, running = true)
+        mutable.value = s.copy(started = true, running = true, elapsedMillis = clock.elapsedMillis())
         checkpoint()
     }
+
+    /** Explicit player pause. This must survive app background/foreground transitions. */
     fun pause() {
+        userPaused = true
+        pausedByLifecycle = false
         clock.pause()
         mutable.value = mutable.value.copy(running = false, elapsedMillis = clock.elapsedMillis())
         if (!mutable.value.loading && mutable.value.error == null && !mutable.value.solved) checkpoint()
+    }
+
+    /** Pause only because Android moved the screen to the background. */
+    fun pauseForLifecycle() {
+        val s = mutable.value
+        if (s.loading || s.error != null || s.solved || !clock.running) return
+        pausedByLifecycle = true
+        clock.pause()
+        mutable.value = s.copy(running = false, elapsedMillis = clock.elapsedMillis())
+        checkpoint()
+    }
+
+    /** Resume automatically only if lifecycle pause caused the stop. */
+    fun resumeFromLifecycle() {
+        val s = mutable.value
+        if (!pausedByLifecycle || userPaused || s.loading || s.error != null || s.solved) return
+        pausedByLifecycle = false
+        clock.resume()
+        mutable.value = s.copy(running = true, started = true, elapsedMillis = clock.elapsedMillis())
     }
     private fun snapshot() = session.copy(positions = engine.getCurrentPositions(),
         moveCount = mutable.value.moves, elapsedMillis = clock.elapsedMillis())
@@ -196,6 +225,8 @@ class PuzzleGameViewModel(
         // starts active play automatically. A deliberate Pause still disables movement.
         if (current.started && !current.running) return 0
         if (!current.started) {
+            userPaused = false
+            pausedByLifecycle = false
             clock.resume()
             session = session.copy(started = true)
             mutable.value = current.copy(started = true, running = true)
@@ -270,6 +301,8 @@ class PuzzleGameViewModel(
         if (current.started && !current.running) return 0
 
         if (!current.started) {
+            userPaused = false
+            pausedByLifecycle = false
             clock.resume()
             session = session.copy(started = true)
             mutable.value = current.copy(started = true, running = true)
@@ -332,6 +365,8 @@ class PuzzleGameViewModel(
         celebrationJob?.cancel()
         clock.restore(0)
         engine.shuffle()
+        userPaused = false
+        pausedByLifecycle = false
         clock.resume()
         session = session.copy(sessionId = UUID.randomUUID().toString(), positions = engine.getCurrentPositions(),
             moveCount = 0, elapsedMillis = 0, started = true, speedEligible = true)
@@ -385,6 +420,8 @@ class PuzzleGameViewModel(
 
         engine = PuzzleEngine(targetGrid)
         clock.restore(0)
+        userPaused = false
+        pausedByLifecycle = false
         clock.resume()
         session = session.copy(
             gridSize = targetGrid,

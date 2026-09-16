@@ -4,6 +4,11 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.animateIntAsState
@@ -123,63 +128,107 @@ fun PicturePuzzleGameScreen(
 
     DisposableEffect(lifecycle, vm) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_PAUSE || event == Lifecycle.Event.ON_STOP) {
-                vm.pause()
+            when (event) {
+                Lifecycle.Event.ON_PAUSE, Lifecycle.Event.ON_STOP -> vm.pauseForLifecycle()
+                Lifecycle.Event.ON_RESUME -> vm.resumeFromLifecycle()
+                else -> Unit
             }
         }
         lifecycle.addObserver(observer)
-        onDispose { lifecycle.removeObserver(observer); vm.pause() }
+        onDispose {
+            lifecycle.removeObserver(observer)
+            vm.pauseForLifecycle()
+        }
     }
     DisposableEffect(feedback) { onDispose { feedback.release() } }
     BackHandler { vm.saveAndLeave(onBack) }
 
-    val pleasantCream = Color(0xFFFFF7EA)
+    val darkLavenderTop = Color(0xFF68518A)
+    val darkLavenderBottom = Color(0xFF44305F)
     val softPanel = Color(0xFFFFFCF4)
+    val lightLavenderPanel = Color(0xFFD9CCF1)
 
-    BoxWithConstraints(modifier.fillMaxSize().background(pleasantCream).safeDrawingPadding()) {
+    BoxWithConstraints(
+        modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        darkLavenderTop,
+                        Color(0xFF5A4378),
+                        darkLavenderBottom
+                    )
+                )
+            )
+            .safeDrawingPadding()
+    ) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 4.dp, vertical = 6.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(
                 Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                IconButton(
+                VibrantCircleAction(
                     onClick = { vm.saveAndLeave(onBack) },
-                    modifier = Modifier.size(40.dp)
+                    modifier = Modifier.size(44.dp),
+                    brush = VibrantBlueBrush
                 ) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Save and go back")
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Save and go back", tint = Color.White)
                 }
-                CompactStatCard("TIME", formatPlayTime(ui.elapsedMillis), Modifier.weight(0.92f), softPanel)
-                CompactStatCard("MOVES", "${ui.moves}", Modifier.weight(0.92f), softPanel)
-                CompactWalletCard(
-                    crystals = crystals,
-                    coins = wallet,
-                    modifier = Modifier.weight(1.56f),
-                    background = softPanel,
-                    onCrystalClick = { crystalInfo = true },
-                    onCoinClick = { rewardInfo = true }
+                CompactTimeCard(
+                    elapsedMillis = ui.elapsedMillis,
+                    modifier = Modifier.weight(1.24f)
+                )
+                CompactStatCard(
+                    value = "${ui.moves}",
+                    modifier = Modifier.weight(0.76f),
+                    background = Color(0xFFFFECDC),
+                    accentBrush = Brush.horizontalGradient(listOf(Color(0xFFFF8A65), Color(0xFFFFC04D))),
+                    icon = { Icon(Icons.Default.SwapHoriz, contentDescription = null, tint = Color(0xFFB65A1D), modifier = Modifier.size(17.dp)) },
+                    valueColor = Color(0xFF4B2D0F)
+                )
+                CompactResourceCard(
+                    value = crystals,
+                    modifier = Modifier.weight(0.82f),
+                    background = Color(0xFFE5F6FF),
+                    accentBrush = Brush.horizontalGradient(listOf(Color(0xFF7DE2FF), Color(0xFF4E9BFF))),
+                    icon = { CrystalIcon(19.dp) },
+                    onClick = { crystalInfo = true },
+                    valueColor = Color(0xFF1B335C)
+                )
+                CompactResourceCard(
+                    value = wallet,
+                    modifier = Modifier.weight(0.98f),
+                    background = Color(0xFFFFF2BF),
+                    accentBrush = Brush.horizontalGradient(listOf(Color(0xFFFFD65A), Color(0xFFFF9A3D))),
+                    icon = { GoldCoinIcon(Modifier.size(19.dp)) },
+                    onClick = { rewardInfo = true },
+                    valueColor = Color(0xFF5A3B00)
                 )
             }
-            // Keep the live puzzle at the exact source-image aspect ratio.
-            // Using a fixed/taller ratio stretches the bitmap slices and makes the outer
-            // corners and merged contours look misaligned with the artwork.
-            val puzzleAspectRatio = ui.image?.bitmap?.let { bitmap ->
-                if (bitmap.height > 0) bitmap.width.toFloat() / bitmap.height.toFloat() else 1f
-            } ?: 1f
+            // The puzzle itself is now a true rectangular grid: fewer columns and more rows.
+            // Match the board footprint to that logical geometry so cells remain balanced and
+            // the puzzle uses substantially more vertical screen space down toward the controls.
+            val puzzleAspectRatio = (vm.engine.gridColumns.toFloat() / vm.engine.gridRows.toFloat())
+                .coerceIn(0.76f, 0.82f)
             // Keep the live puzzle framed while playing, but remove that outer board frame
             // completely during the magical finished transformation so no extra oval/outline
             // remains behind the final finished card.
-            val puzzleFrameShape = RoundedCornerShape(7.dp)
-            val puzzleContentShape = RoundedCornerShape(6.dp)
-            val puzzleFrameColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.52f)
+            val puzzleFrameShape = RoundedCornerShape(9.dp)
+            val puzzleContentShape = RoundedCornerShape(7.dp)
+            val puzzleFrameColor = Color(0xFFF4EEE5)
             val boardContent: @Composable BoxScope.() -> Unit = {
                 when {
                     ui.loading -> CircularProgressIndicator()
                     ui.error != null -> Column(Modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(ui.error!!)
-                        Button(onClick = vm::load) { Text("Try again") }
+                        VibrantAction(
+                            onClick = vm::load,
+                            modifier = Modifier.height(48.dp).fillMaxWidth(0.55f),
+                            brush = VibrantOrangeBrush
+                        ) { Text("Try again", color = Color.White, fontWeight = FontWeight.Bold) }
                     }
                     ui.image != null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Box(
@@ -243,8 +292,9 @@ fun PicturePuzzleGameScreen(
                     Modifier.fillMaxWidth(),
                     shape = puzzleFrameShape,
                     color = puzzleFrameColor,
+                    border = BorderStroke(1.6.dp, Color(0xFFD9D0C7)),
                     tonalElevation = 0.dp,
-                    shadowElevation = 3.dp
+                    shadowElevation = 5.dp
                 ) {
                     Box(
                         Modifier
@@ -258,12 +308,15 @@ fun PicturePuzzleGameScreen(
                     )
                 }
             }
-            Surface(
-                Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(20.dp),
-                color = softPanel
-            ) {
-                if (ui.solved) {
+            if (ui.solved) {
+                Surface(
+                    Modifier.fillMaxWidth(0.88f),
+                    shape = RoundedCornerShape(24.dp),
+                    color = softPanel,
+                    border = BorderStroke(1.4.dp, Color(0xFFD9D0C7)),
+                    tonalElevation = 0.dp,
+                    shadowElevation = 0.dp
+                ) {
                     Column(
                         Modifier.padding(14.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
@@ -310,7 +363,7 @@ fun PicturePuzzleGameScreen(
                                     color = MaterialTheme.colorScheme.primary
                                 )
                             }
-                            Button(
+                            VibrantAction(
                                 onClick = {
                                     when {
                                         replayMode -> onBack()
@@ -320,27 +373,25 @@ fun PicturePuzzleGameScreen(
                                 },
                                 modifier = Modifier
                                     .fillMaxWidth(0.52f)
-                                    .height(50.dp),
-                                shape = RoundedCornerShape(20.dp),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = Color(0xFFFFA800),
-                                    contentColor = Color.White
-                                ),
-                                elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp)
+                                    .height(52.dp),
+                                shape = RoundedCornerShape(22.dp),
+                                brush = VibrantOrangeBrush
                             ) {
-                                Text(
-                                    when {
-                                        replayMode -> "Back to History"
-                                        levelId == PuzzleLevel.maxLevelId -> "Home"
-                                        else -> "Level ${levelId + 1}"
-                                    },
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = Color.White
-                                )
-                                if (!replayMode && levelId != PuzzleLevel.maxLevelId) {
-                                    Spacer(Modifier.width(6.dp))
-                                    Icon(Icons.Default.ArrowForward, contentDescription = null, tint = Color.White)
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        when {
+                                            replayMode -> "Back to History"
+                                            levelId == PuzzleLevel.maxLevelId -> "Home"
+                                            else -> "Level ${levelId + 1}"
+                                        },
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = Color.White
+                                    )
+                                    if (!replayMode && levelId != PuzzleLevel.maxLevelId) {
+                                        Spacer(Modifier.width(6.dp))
+                                        Icon(Icons.Default.ArrowForward, contentDescription = null, tint = Color.White)
+                                    }
                                 }
                             }
                         } else if (!ui.saveError) {
@@ -352,26 +403,26 @@ fun PicturePuzzleGameScreen(
                             )
                         }
                     }
-                } else {
-                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("Completion", style = MaterialTheme.typography.labelLarge)
-                            Text(
-                                "${(progress * 100).toInt()}%",
-                                style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                        LinearProgressIndicator(
-                            progress = { animatedProgress },
-                            modifier = Modifier.fillMaxWidth().height(6.dp),
-                            trackColor = Color.White
-                        )
-
+                }
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 10.dp, vertical = 14.dp)
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(lightLavenderPanel)
+                ) {
+                    OceanTrayProgressBackground(
+                        progress = animatedProgress,
+                        modifier = Modifier.matchParentSize()
+                    )
+                    Column(
+                        Modifier.padding(horizontal = 4.dp, vertical = 6.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
                         Row(
                             Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
                             verticalAlignment = Alignment.Top
                         ) {
                             PuzzleControlIcon(
@@ -380,8 +431,9 @@ fun PicturePuzzleGameScreen(
                                 contentDescription = if (ui.running) "Pause the puzzle timer" else "Resume the puzzle timer",
                                 enabled = !ui.loading && ui.image != null,
                                 onClick = { if (ui.running) vm.pause() else vm.resume() },
-                                modifier = Modifier.weight(1f)
-                            )
+                                modifier = Modifier.weight(1f),
+                                    brush = Brush.linearGradient(listOf(Color(0xFF6B7CFF), Color(0xFF8D5CFF)))
+                                )
                             PuzzleControlIcon(
                                 icon = when {
                                     gridShifted -> Icons.Default.Restore
@@ -406,8 +458,9 @@ fun PicturePuzzleGameScreen(
                                 },
                                 modifier = Modifier.weight(1f),
                                 containerColor = if (gridShifted) MaterialTheme.colorScheme.tertiaryContainer
-                                    else MaterialTheme.colorScheme.secondaryContainer
-                            )
+                                    else MaterialTheme.colorScheme.secondaryContainer,
+                                    brush = Brush.linearGradient(listOf(Color(0xFF38D9C8), Color(0xFF53B3FF)))
+                                )
                             PuzzleControlIcon(
                                 icon = Icons.Default.Lightbulb,
                                 label = "Hint",
@@ -431,16 +484,18 @@ fun PicturePuzzleGameScreen(
                                         }
                                     }
                                 },
-                                modifier = Modifier.weight(1f)
-                            )
+                                modifier = Modifier.weight(1f),
+                                    brush = Brush.linearGradient(listOf(Color(0xFFFFB347), Color(0xFFFF5D8F)))
+                                )
                             PuzzleControlIcon(
                                 icon = Icons.Default.Refresh,
                                 label = "Restart",
                                 contentDescription = "Restart this adventure",
                                 enabled = !ui.loading && ui.image != null,
                                 onClick = { confirmRestart = true },
-                                modifier = Modifier.weight(1f)
-                            )
+                                modifier = Modifier.weight(1f),
+                                    brush = Brush.linearGradient(listOf(Color(0xFFFF8A7A), Color(0xFFFFA73D)))
+                                )
                         }
                     }
                 }
@@ -453,7 +508,11 @@ fun PicturePuzzleGameScreen(
             }
             if (ui.saveError) {
                 Text("Progress hasn’t been saved yet. Please retry before leaving.", color = MaterialTheme.colorScheme.error)
-                OutlinedButton(onClick = vm::retrySave) { Text("Retry save") }
+                VibrantAction(
+                    onClick = vm::retrySave,
+                    modifier = Modifier.height(46.dp).fillMaxWidth(0.5f),
+                    brush = VibrantPinkBrush
+                ) { Text("Retry save", color = Color.White, fontWeight = FontWeight.Bold) }
             }
             Spacer(Modifier.height(8.dp))
         }
@@ -573,93 +632,175 @@ fun CrystalIcon(size: androidx.compose.ui.unit.Dp = 18.dp) {
 }
 
 @Composable
-private fun CompactStatCard(
-    label: String,
-    value: String,
-    modifier: Modifier,
-    background: Color
+private fun CompactTimeCard(
+    elapsedMillis: Long,
+    modifier: Modifier = Modifier
 ) {
-    Surface(modifier.heightIn(min = 48.dp), shape = RoundedCornerShape(14.dp), color = background) {
-        Column(
-            Modifier.padding(horizontal = 4.dp, vertical = 6.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+    val totalSeconds = (elapsedMillis.coerceAtLeast(0L) / 1000L)
+    val minutes = totalSeconds / 60L
+    val seconds = totalSeconds % 60L
+    val shape = RoundedCornerShape(18.dp)
+    val accent = Brush.horizontalGradient(listOf(Color(0xFF5CCBFF), Color(0xFF6D73FF)))
+
+    Box(
+        modifier = modifier
+            .height(70.dp)
+            .clip(shape)
+            .background(Color(0xFFE5F5FF))
+            .border(1.5.dp, accent, shape)
+            .semantics {
+                contentDescription = "$minutes minutes $seconds seconds"
+            }
+    ) {
+        Box(
+            Modifier
+                .align(Alignment.TopCenter)
+                .fillMaxWidth(0.74f)
+                .height(4.dp)
+                .clip(CircleShape)
+                .background(accent)
+        )
+        Row(
+            Modifier
+                .fillMaxSize()
+                .padding(horizontal = 7.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
         ) {
-            Text(value, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, maxLines = 1)
-            Text(label, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Icon(
+                Icons.Default.Schedule,
+                contentDescription = null,
+                tint = Color(0xFF3F5FC9),
+                modifier = Modifier.size(17.dp)
+            )
+            Spacer(Modifier.width(5.dp))
+            TimeUnitValue(minutes, "m")
+            Text(
+                ":",
+                color = Color(0xFF6F78A8),
+                fontWeight = FontWeight.Black,
+                fontSize = 18.sp,
+                modifier = Modifier.padding(horizontal = 2.dp)
+            )
+            TimeUnitValue(seconds, "s")
         }
     }
 }
 
 @Composable
-private fun CompactWalletCard(
-    crystals: Int,
-    coins: Int,
+private fun TimeUnitValue(value: Long, suffix: String) {
+    Row(verticalAlignment = Alignment.Bottom) {
+        Text(
+            text = value.toString().padStart(2, '0'),
+            color = Color(0xFF1F2554),
+            fontWeight = FontWeight.Black,
+            fontSize = 20.sp,
+            maxLines = 1
+        )
+        Text(
+            text = suffix,
+            color = Color(0xFF55639C),
+            fontWeight = FontWeight.ExtraBold,
+            fontSize = 10.sp,
+            modifier = Modifier.padding(start = 1.dp, bottom = 3.dp)
+        )
+    }
+}
+
+@Composable
+private fun CompactStatCard(
+    value: String,
     modifier: Modifier,
     background: Color,
-    onCrystalClick: () -> Unit,
-    onCoinClick: () -> Unit
+    accentBrush: Brush,
+    icon: @Composable () -> Unit,
+    valueColor: Color = Color(0xFF231A34)
 ) {
-    Surface(modifier.heightIn(min = 48.dp), shape = RoundedCornerShape(14.dp), color = background) {
+    val shape = RoundedCornerShape(18.dp)
+    Box(
+        modifier = modifier
+            .height(70.dp)
+            .clip(shape)
+            .background(background)
+            .border(width = 1.5.dp, brush = accentBrush, shape = shape)
+    ) {
+        Box(
+            Modifier
+                .align(Alignment.TopCenter)
+                .fillMaxWidth(0.70f)
+                .height(4.dp)
+                .clip(CircleShape)
+                .background(accentBrush)
+        )
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp),
+            Modifier
+                .fillMaxSize()
+                .padding(horizontal = 8.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Surface(
-                onClick = onCrystalClick,
-                color = Color.Transparent,
-                modifier = Modifier
-                    .weight(1f)
-                    .heightIn(min = 40.dp)
-                    .semantics { contentDescription = "$crystals crystals. Grid Shift power" }
-            ) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Row(
-                        Modifier.padding(horizontal = 5.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
-                    ) {
-                        CrystalIcon(20.dp)
-                        Spacer(Modifier.width(5.dp))
-                        Text(
-                            "$crystals",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.ExtraBold,
-                            maxLines = 1
-                        )
-                    }
-                }
-            }
+            icon()
+            Spacer(Modifier.width(6.dp))
+            Text(
+                value,
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Black,
+                color = valueColor,
+                maxLines = 1
+            )
+        }
+    }
+}
+
+@Composable
+private fun CompactResourceCard(
+    value: Int,
+    modifier: Modifier,
+    background: Color,
+    accentBrush: Brush,
+    icon: @Composable () -> Unit,
+    onClick: () -> Unit,
+    valueColor: Color = Color(0xFF231A34)
+) {
+    val shape = RoundedCornerShape(18.dp)
+    Surface(
+        onClick = onClick,
+        modifier = modifier
+            .height(70.dp)
+            .border(width = 1.5.dp, brush = accentBrush, shape = shape)
+            .semantics(mergeDescendants = true) {
+                contentDescription = value.toString()
+            },
+        shape = shape,
+        color = background,
+        tonalElevation = 0.dp,
+        shadowElevation = 2.dp
+    ) {
+        Box(Modifier.fillMaxSize()) {
             Box(
                 Modifier
-                    .width(1.dp)
-                    .height(26.dp)
-                    .background(MaterialTheme.colorScheme.outlineVariant)
+                    .align(Alignment.TopCenter)
+                    .fillMaxWidth(0.70f)
+                    .height(4.dp)
+                    .clip(CircleShape)
+                    .background(accentBrush)
             )
-            Surface(
-                onClick = onCoinClick,
-                color = Color.Transparent,
-                modifier = Modifier
-                    .weight(1f)
-                    .heightIn(min = 40.dp)
-                    .semantics { contentDescription = "$coins gold coins. Reward details" }
+            Row(
+                Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 8.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Row(
-                        Modifier.padding(horizontal = 5.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
-                    ) {
-                        GoldCoinIcon(Modifier.size(20.dp))
-                        Spacer(Modifier.width(5.dp))
-                        Text(
-                            "$coins",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.ExtraBold,
-                            maxLines = 1
-                        )
-                    }
-                }
+                icon()
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    value.toString(),
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Black,
+                    color = valueColor,
+                    maxLines = 1
+                )
             }
         }
     }
@@ -667,6 +808,7 @@ private fun CompactWalletCard(
 
 @Composable
 private fun PuzzleControlIcon(
+
     icon: ImageVector,
     label: String,
     contentDescription: String,
@@ -674,41 +816,179 @@ private fun PuzzleControlIcon(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     containerColor: Color = MaterialTheme.colorScheme.surfaceVariant,
+    brush: Brush = Brush.verticalGradient(listOf(containerColor.copy(alpha = 0.96f), Color.White.copy(alpha = 0.78f))),
     badgeCount: Int? = null
 ) {
     Column(
         modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(2.dp)
+        verticalArrangement = Arrangement.spacedBy(5.dp)
     ) {
-        FilledTonalIconButton(
+        VibrantAction(
             onClick = onClick,
             enabled = enabled,
             modifier = Modifier
-                .size(48.dp)
-                .semantics { this.contentDescription = contentDescription },
-            colors = IconButtonDefaults.filledTonalIconButtonColors(containerColor = containerColor)
+                .size(60.dp)
+                .semantics {
+                    this.contentDescription = contentDescription
+                },
+            shape = CircleShape,
+            brush = brush
         ) {
             if (badgeCount != null) {
                 BadgedBox(
                     badge = {
-                        Badge {
-                            Text(badgeCount.coerceAtLeast(0).toString())
+                        Badge(containerColor = Color(0xFFFFF176), contentColor = Color(0xFF4A2C00)) {
+                            Text(badgeCount.coerceAtLeast(0).toString(), fontWeight = FontWeight.Bold)
                         }
                     }
                 ) {
-                    Icon(icon, contentDescription = null, modifier = Modifier.size(23.dp))
+                    Icon(icon, contentDescription = null, modifier = Modifier.size(25.dp), tint = Color(0xFF2E2440))
                 }
             } else {
-                Icon(icon, contentDescription = null, modifier = Modifier.size(23.dp))
+                Icon(icon, contentDescription = null, modifier = Modifier.size(25.dp), tint = Color(0xFF2E2440))
             }
         }
         Text(
             text = label,
-            style = MaterialTheme.typography.labelSmall,
+            style = MaterialTheme.typography.labelMedium,
+            color = Color(0xFF3F3155),
+            fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+@Composable
+private fun OceanTrayProgressBackground(
+    progress: Float,
+    modifier: Modifier = Modifier
+) {
+    val clampedProgress = progress.coerceIn(0f, 1f)
+    val infiniteTransition = rememberInfiniteTransition(label = "ocean-tray-progress")
+    val farWaveShift by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(3800, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "tray-far-wave-shift"
+    )
+    val frontWaveShift by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2400, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "tray-front-wave-shift"
+    )
+    val shimmerX by infiniteTransition.animateFloat(
+        initialValue = -0.25f,
+        targetValue = 1.20f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(3000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "tray-shimmer"
+    )
+
+    Canvas(
+        modifier = modifier.background(Color(0xFFE6DDF6))
+    ) {
+        if (clampedProgress <= 0.001f) return@Canvas
+
+        val waterTop = size.height * (1f - clampedProgress)
+        val backAmplitude = 5.dp.toPx() * (0.55f + clampedProgress * 0.45f)
+        val frontAmplitude = 8.dp.toPx() * (0.55f + clampedProgress * 0.45f)
+        val backWaveLength = size.width / 1.05f
+        val frontWaveLength = size.width / 1.45f
+
+        fun buildWave(top: Float, amplitude: Float, waveLength: Float, shift: Float, verticalBias: Float): Path {
+            return Path().apply {
+                moveTo(0f, size.height)
+                lineTo(0f, top)
+                val steps = 96
+                for (step in 0..steps) {
+                    val x = size.width * step / steps.toFloat()
+                    val angle = ((x / waveLength) * (Math.PI * 2.0)).toFloat() - (shift * (Math.PI * 2.0)).toFloat()
+                    val y = top + kotlin.math.sin(angle) * amplitude + verticalBias * kotlin.math.sin(angle * 0.55f)
+                    lineTo(x, y)
+                }
+                lineTo(size.width, size.height)
+                close()
+            }
+        }
+
+        val backWave = buildWave(waterTop + 7.dp.toPx(), backAmplitude, backWaveLength, farWaveShift, 1.6f)
+        val frontWave = buildWave(waterTop, frontAmplitude, frontWaveLength, frontWaveShift, 2.8f)
+
+        drawPath(
+            path = backWave,
+            brush = Brush.verticalGradient(
+                colors = listOf(
+                    Color(0xFF98EFFF).copy(alpha = 0.56f),
+                    Color(0xFF5BCBFF).copy(alpha = 0.72f),
+                    Color(0xFF378BFF).copy(alpha = 0.82f)
+                ),
+                startY = waterTop,
+                endY = size.height
+            )
+        )
+        drawPath(
+            path = frontWave,
+            brush = Brush.verticalGradient(
+                colors = listOf(
+                    Color(0xFF9EF3FF).copy(alpha = 0.90f),
+                    Color(0xFF54C9FF).copy(alpha = 0.95f),
+                    Color(0xFF2563FF).copy(alpha = 0.98f)
+                ),
+                startY = waterTop,
+                endY = size.height
+            )
+        )
+
+        val crest = Path().apply {
+            val steps = 96
+            moveTo(0f, waterTop)
+            for (step in 0..steps) {
+                val x = size.width * step / steps.toFloat()
+                val angle = ((x / frontWaveLength) * (Math.PI * 2.0)).toFloat() - (frontWaveShift * (Math.PI * 2.0)).toFloat()
+                val y = waterTop + kotlin.math.sin(angle) * frontAmplitude + 2.8f * kotlin.math.sin(angle * 0.55f)
+                lineTo(x, y)
+            }
+        }
+        drawPath(
+            path = crest,
+            color = Color.White.copy(alpha = 0.92f),
+            style = Stroke(width = 2.2.dp.toPx())
+        )
+        // foam glints carried from left to right
+        repeat(4) { index ->
+            val bubbleX = ((shimmerX + (index * 0.17f)) % 1.25f) * size.width
+            drawCircle(
+                color = Color.White.copy(alpha = 0.28f),
+                radius = (2.2f + index * 0.55f).dp.toPx(),
+                center = Offset(
+                    bubbleX,
+                    waterTop + 4.dp.toPx() + kotlin.math.sin(
+                        (bubbleX / size.width) * (Math.PI * 2.0).toFloat() -
+                            frontWaveShift * (Math.PI * 2.0).toFloat()
+                    ).toFloat() * frontAmplitude
+                )
+            )
+        }
+        drawRect(
+            brush = Brush.horizontalGradient(
+                0f to Color.Transparent,
+                shimmerX.coerceIn(0f, 1f) to Color.White.copy(alpha = 0.09f),
+                (shimmerX + 0.14f).coerceIn(0f, 1f) to Color.Transparent
+            ),
+            topLeft = Offset.Zero,
+            size = size
         )
     }
 }

@@ -87,7 +87,11 @@ fun HomeScreen(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(HomeCream)
+            .background(
+                Brush.verticalGradient(
+                    listOf(Color(0xFFFFF1D6), Color(0xFFFFE6F0), Color(0xFFE7F7FF), Color(0xFFF4F0FF))
+                )
+            )
             .safeDrawingPadding()
     ) {
         Column(
@@ -98,16 +102,16 @@ fun HomeScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
-            Spacer(Modifier.height(18.dp))
+            Spacer(Modifier.height(26.dp))
             Box(modifier = Modifier.fillMaxWidth()) {
                 PlayInBlockBrand(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 28.dp)
+                        .padding(horizontal = 10.dp)
                 )
             }
 
-            Spacer(Modifier.height(132.dp))
+            Spacer(Modifier.height(72.dp))
 
             CurrentLevelButtonCard(
                 currentChapter = currentChapter,
@@ -126,26 +130,27 @@ fun HomeScreen(
 
         }
 
-        IconButton(
+        VibrantCircleAction(
             onClick = onSettings,
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .padding(top = 2.dp, end = 18.dp)
-                .background(HomePanel, CircleShape)
-                .size(44.dp)
+                .size(48.dp),
+            brush = VibrantPinkBrush
         ) {
-            Icon(Icons.Default.Settings, contentDescription = "Settings", tint = HomeAccent)
+            Icon(Icons.Default.Settings, contentDescription = "Settings", tint = Color.White)
         }
 
-        FloatingActionButton(
+        VibrantAction(
             onClick = onJourneyHistory,
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(20.dp),
-            containerColor = MaterialTheme.colorScheme.primaryContainer,
-            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                .padding(20.dp)
+                .size(58.dp),
+            shape = RoundedCornerShape(20.dp),
+            brush = VibrantBlueBrush
         ) {
-            Icon(Icons.Default.History, contentDescription = "Journey History")
+            Icon(Icons.Default.History, contentDescription = "Adventure History", tint = Color.White)
         }
     }
 }
@@ -161,7 +166,7 @@ private fun PlayInBlockBrand(modifier: Modifier = Modifier) {
                 ),
                 shape = RoundedCornerShape(28.dp)
             )
-            .padding(horizontal = 18.dp, vertical = 22.dp)
+            .padding(horizontal = 12.dp, vertical = 20.dp)
     ) {
         Column(
             modifier = Modifier.fillMaxWidth(),
@@ -173,8 +178,8 @@ private fun PlayInBlockBrand(modifier: Modifier = Modifier) {
                 modifier = Modifier.fillMaxWidth(),
                 textAlign = TextAlign.Center,
                 color = TitleLight,
-                fontSize = 68.sp,
-                lineHeight = 70.sp,
+                fontSize = 58.sp,
+                lineHeight = 60.sp,
                 fontWeight = FontWeight.Black,
                 letterSpacing = 3.sp
             )
@@ -183,8 +188,8 @@ private fun PlayInBlockBrand(modifier: Modifier = Modifier) {
                 modifier = Modifier.fillMaxWidth(),
                 textAlign = TextAlign.Center,
                 color = TitleWarm,
-                fontSize = 42.sp,
-                lineHeight = 44.sp,
+                fontSize = 36.sp,
+                lineHeight = 38.sp,
                 fontWeight = FontWeight.ExtraBold,
                 fontStyle = FontStyle.Italic,
                 letterSpacing = 9.sp
@@ -194,10 +199,12 @@ private fun PlayInBlockBrand(modifier: Modifier = Modifier) {
                 modifier = Modifier.fillMaxWidth(),
                 textAlign = TextAlign.Center,
                 color = TitleLight,
-                fontSize = 68.sp,
-                lineHeight = 70.sp,
+                fontSize = 48.sp,
+                lineHeight = 50.sp,
                 fontWeight = FontWeight.Black,
-                letterSpacing = 2.sp
+                letterSpacing = 0.2.sp,
+                maxLines = 1,
+                softWrap = false
             )
         }
     }
@@ -208,14 +215,13 @@ private fun CurrentLevelButtonCard(
     currentChapter: Int,
     onClick: () -> Unit
 ) {
-    Card(
+    VibrantAction(
         onClick = onClick,
         modifier = Modifier
             .fillMaxWidth()
             .height(84.dp),
-        shape = RoundedCornerShape(26.dp),
-        colors = CardDefaults.cardColors(containerColor = HomeAccentSoft),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        shape = RoundedCornerShape(28.dp),
+        brush = VibrantOrangeBrush
     ) {
         Row(
             modifier = Modifier
@@ -228,14 +234,14 @@ private fun CurrentLevelButtonCard(
                 text = "LEVEL $currentChapter",
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Black,
-                color = HomeAccentDeep
+                color = Color.White
             )
             Spacer(Modifier.width(10.dp))
             Icon(
                 imageVector = Icons.Default.PlayArrow,
                 contentDescription = null,
-                tint = HomeAccentDeep,
-                modifier = Modifier.size(28.dp)
+                tint = Color.White,
+                modifier = Modifier.size(30.dp)
             )
         }
     }
@@ -262,7 +268,11 @@ fun SettingsScreen(
     var selectedBlockMotion by remember(blockMotionPreset) { mutableStateOf(blockMotionPreset) }
 
     Column(
-        modifier = modifier.fillMaxSize().background(HomeCream)
+        modifier = modifier.fillMaxSize().background(
+                Brush.verticalGradient(
+                    listOf(Color(0xFFFFF2DA), Color(0xFFFFEAF2), Color(0xFFE9F8FF), Color(0xFFF5EEFF))
+                )
+            )
             .safeDrawingPadding().verticalScroll(rememberScrollState()).padding(16.dp)
     ) {
         ScreenHeader(title = "Settings", onBack = onBack)
@@ -316,8 +326,13 @@ fun SettingsScreen(
         }
 
         Spacer(Modifier.height(28.dp))
-        OutlinedButton(onClick = { confirmReset = true }, modifier = Modifier.fillMaxWidth()) {
-            Text("Reset Game Progress")
+        VibrantAction(
+            onClick = { confirmReset = true },
+            modifier = Modifier.fillMaxWidth().height(52.dp),
+            shape = RoundedCornerShape(18.dp),
+            brush = VibrantPinkBrush
+        ) {
+            Text("Reset Game Progress", color = Color.White, fontWeight = FontWeight.Bold)
         }
     }
 
@@ -345,7 +360,15 @@ private fun ImageSourceRow(
     icon: @Composable () -> Unit,
     onClick: () -> Unit
 ) {
-    Card(onClick = onClick, modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp)) {
+    VibrantAction(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp),
+        shape = RoundedCornerShape(18.dp),
+        brush = if (selected) VibrantBlueBrush else Brush.linearGradient(
+            listOf(Color(0xFFFFF3CF), Color(0xFFE8F8FF))
+        ),
+        contentColor = if (selected) Color.White else HomeAccentDeep
+    ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -353,7 +376,11 @@ private fun ImageSourceRow(
             icon()
             Column(modifier = Modifier.fillMaxWidth(0.78f).padding(horizontal = 12.dp)) {
                 Text(title, fontWeight = FontWeight.Medium)
-                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (selected) Color.White.copy(alpha = 0.88f) else MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
             RadioButton(selected = selected, onClick = onClick)
         }
@@ -390,10 +417,14 @@ private fun MotionPresetRow(
     selected: Boolean,
     onClick: () -> Unit
 ) {
-    Card(
+    VibrantAction(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp),
-        colors = CardDefaults.cardColors(containerColor = if (selected) HomeAccentSoft else MaterialTheme.colorScheme.surface)
+        shape = RoundedCornerShape(18.dp),
+        brush = if (selected) VibrantMintBrush else Brush.linearGradient(
+            listOf(Color(0xFFFFE8F0), Color(0xFFEAF7FF))
+        ),
+        contentColor = if (selected) Color.White else HomeAccentDeep
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(12.dp),
@@ -404,7 +435,7 @@ private fun MotionPresetRow(
                 Text(
                     "${preset.displaySubtitle()} · ~${preset.durationMillis} ms",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = if (selected) Color.White.copy(alpha = 0.88f) else MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
             RadioButton(selected = selected, onClick = onClick)
@@ -415,7 +446,11 @@ private fun MotionPresetRow(
 @Composable
 fun HowToPlayScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
     Column(
-        modifier = modifier.fillMaxSize().background(HomeCream)
+        modifier = modifier.fillMaxSize().background(
+                Brush.verticalGradient(
+                    listOf(Color(0xFFFFF2DA), Color(0xFFFFEAF2), Color(0xFFE9F8FF), Color(0xFFF5EEFF))
+                )
+            )
             .safeDrawingPadding().verticalScroll(rememberScrollState()).padding(16.dp)
     ) {
         ScreenHeader(title = "How to Play", onBack = onBack)
@@ -427,7 +462,7 @@ fun HowToPlayScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
         Spacer(Modifier.height(16.dp))
         Text("4. You can choose Pexels photos or bundled offline artwork in Settings.", style = MaterialTheme.typography.bodyLarge)
         Spacer(Modifier.height(16.dp))
-        Text("5. Adventures begin with 4×4 grids, then grow through 5×5, 6×6, 7×7 and 8×8, with surprise grids near the end.", style = MaterialTheme.typography.bodyLarge)
+        Text("5. Adventures use tall rectangular grids with more rows than columns. Early puzzles begin around 4×5 and grow up to 8×9, with surprise rectangular grids near the end.", style = MaterialTheme.typography.bodyLarge)
         Spacer(Modifier.height(16.dp))
         Text("6. The timer starts automatically as soon as the adventure opens. Pause freezes time while keeping the puzzle visible. Resume continues from the same board.", style = MaterialTheme.typography.bodyLarge)
         Spacer(Modifier.height(16.dp))
@@ -450,7 +485,14 @@ private fun ScreenHeader(title: String, onBack: () -> Unit) {
         modifier = Modifier.fillMaxWidth().height(56.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
+        VibrantCircleAction(
+            onClick = onBack,
+            modifier = Modifier.size(44.dp),
+            brush = VibrantBlueBrush
+        ) {
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
+        }
+        Spacer(Modifier.width(10.dp))
         Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
     }
     Spacer(Modifier.height(16.dp))
@@ -462,7 +504,7 @@ private fun HomeLightPreview() {
     com.hb.puzz.ui.theme.CozyBlocksTheme(darkTheme = false) {
         HomeScreen(crystalBalance = 2, coinBalance = 640, completedCount = 8, hasSavedGame = true,
             currentChapter = 9, currentChapterTitle = "Red Rock Valley",
-            currentDifficulty = "Medium · Focus Flow", currentGridDescription = "6×6 Grid",
+            currentDifficulty = "Medium · Focus Flow", currentGridDescription = "6×7 Grid",
             journeyComplete = false, onContinue = {}, onStartJourney = {}, onJourneyHistory = {}, onHowToPlay = {}, onSettings = {})
     }
 }
@@ -473,7 +515,7 @@ private fun HomeDarkPreview() {
     com.hb.puzz.ui.theme.CozyBlocksTheme(darkTheme = true) {
         HomeScreen(crystalBalance = 2, coinBalance = 640, completedCount = 8, hasSavedGame = true,
             currentChapter = 9, currentChapterTitle = "Red Rock Valley",
-            currentDifficulty = "Medium · Focus Flow", currentGridDescription = "6×6 Grid",
+            currentDifficulty = "Medium · Focus Flow", currentGridDescription = "6×7 Grid",
             journeyComplete = false, onContinue = {}, onStartJourney = {}, onJourneyHistory = {}, onHowToPlay = {}, onSettings = {})
     }
 }

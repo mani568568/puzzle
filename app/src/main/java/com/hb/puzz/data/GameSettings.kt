@@ -8,6 +8,7 @@ import com.hb.puzz.data.images.PexelsPhotoMeta
 import com.hb.puzz.domain.CoinReward
 import com.hb.puzz.domain.CoinRewards
 import com.hb.puzz.domain.PuzzleLevel
+import com.hb.puzz.domain.PuzzleEngine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import org.json.JSONObject
@@ -146,12 +147,12 @@ class GameSettings(context: Context) {
         val raw = json?.getString("positions") ?: p[stringPreferencesKey("saved_positions")] ?: return null
         val positions = raw.split(',').map(String::toInt).toIntArray()
         val grid = json?.getInt("grid") ?: p[intPreferencesKey("saved_grid_size")]
-            ?: kotlin.math.sqrt(positions.size.toDouble()).toInt()
+            ?: level.gridSize
         val baseGrid = json?.optInt("baseGrid", 0)?.takeIf { it > 0 } ?: run {
             // Old saves predate Grid Shift. Their stored grid was always a normal Adventure grid.
             if (level.acceptsBaseGridSize(grid)) grid else level.gridSize
         }
-        if (!level.acceptsSessionGridSize(baseGrid, grid) || positions.size != grid * grid ||
+        if (!level.acceptsSessionGridSize(baseGrid, grid) || positions.size != PuzzleEngine.tileCountForSize(grid) ||
             positions.toSet().size != positions.size || positions.any { it !in positions.indices }) return null
         PuzzleSession(id, grid, positions,
             (json?.optInt("moves") ?: p[intPreferencesKey("saved_moves")] ?: 0).coerceAtLeast(0),
@@ -209,7 +210,7 @@ class GameSettings(context: Context) {
 
     suspend fun saveSession(s: PuzzleSession) {
         require(PuzzleLevel.requireLevel(s.levelId).acceptsSessionGridSize(s.baseGridSize, s.gridSize))
-        require(s.positions.size == s.gridSize * s.gridSize && s.positions.toSet().size == s.positions.size)
+        require(s.positions.size == PuzzleEngine.tileCountForSize(s.gridSize) && s.positions.toSet().size == s.positions.size)
         require(s.positions.all { it in s.positions.indices })
         store.edit { p -> p[sessionKey] = encode(s); removeLegacySession(p) }
     }
