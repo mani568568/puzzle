@@ -1,6 +1,7 @@
 package com.hb.puzz.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,6 +34,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -44,11 +46,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.hb.puzz.data.BlockMotionSpeed
 import com.hb.puzz.data.images.ImageSourceMode
 
 private val HomeCream = Color(0xFFFFF7EA)
@@ -56,6 +60,10 @@ private val HomePanel = Color(0xFFFFFCF4)
 private val HomeAccent = Color(0xFFB86A3B)
 private val HomeAccentSoft = Color(0xFFF4E1C9)
 private val HomeAccentDeep = Color(0xFF8D4F23)
+private val TitlePanelTop = Color(0xFF5B3524)
+private val TitlePanelBottom = Color(0xFF2E1B13)
+private val TitleLight = Color(0xFFFFF5E9)
+private val TitleWarm = Color(0xFFFFD39C)
 
 @Composable
 fun HomeScreen(
@@ -90,39 +98,43 @@ fun HomeScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
+            Spacer(Modifier.height(18.dp))
             Box(modifier = Modifier.fillMaxWidth()) {
                 PlayInBlockBrand(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 42.dp)
+                        .padding(horizontal = 28.dp)
                 )
-                IconButton(
-                    onClick = onSettings,
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .background(HomePanel, CircleShape)
-                        .size(46.dp)
-                ) {
-                    Icon(Icons.Default.Settings, contentDescription = "Settings", tint = HomeAccent)
-                }
             }
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center
-            ) {
-                CrystalPill(crystalBalance, onClick = onHowToPlay)
-                Spacer(Modifier.width(10.dp))
-                CoinPill(coinBalance, onClick = onHowToPlay)
-            }
-
-            Spacer(Modifier.height(74.dp))
+            Spacer(Modifier.height(132.dp))
 
             CurrentLevelButtonCard(
                 currentChapter = currentChapter,
                 onClick = primaryAction
             )
 
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                CrystalPill(crystalBalance, onClick = onHowToPlay)
+                Spacer(Modifier.width(10.dp))
+                CoinPill(coinBalance, onClick = onHowToPlay)
+            }
+
+        }
+
+        IconButton(
+            onClick = onSettings,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(top = 2.dp, end = 18.dp)
+                .background(HomePanel, CircleShape)
+                .size(44.dp)
+        ) {
+            Icon(Icons.Default.Settings, contentDescription = "Settings", tint = HomeAccent)
         }
 
         FloatingActionButton(
@@ -141,41 +153,53 @@ fun HomeScreen(
 
 @Composable
 private fun PlayInBlockBrand(modifier: Modifier = Modifier) {
-    Column(
-        modifier = modifier,
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(0.dp)
+    Box(
+        modifier = modifier
+            .background(
+                brush = Brush.verticalGradient(
+                    colors = listOf(TitlePanelTop, TitlePanelBottom)
+                ),
+                shape = RoundedCornerShape(28.dp)
+            )
+            .padding(horizontal = 18.dp, vertical = 22.dp)
     ) {
-        Text(
-            text = "PLAY",
-            modifier = Modifier.fillMaxWidth().graphicsLayer { shadowElevation = 4f },
-            textAlign = TextAlign.Center,
-            color = HomeAccentDeep,
-            fontSize = 46.sp,
-            lineHeight = 48.sp,
-            fontWeight = FontWeight.Black,
-            letterSpacing = 3.sp
-        )
-        Text(
-            text = "IN",
+        Column(
             modifier = Modifier.fillMaxWidth(),
-            textAlign = TextAlign.Center,
-            color = HomeAccent,
-            fontSize = 30.sp,
-            lineHeight = 32.sp,
-            fontWeight = FontWeight.ExtraBold,
-            letterSpacing = 8.sp
-        )
-        Text(
-            text = "BLOCK",
-            modifier = Modifier.fillMaxWidth().graphicsLayer { shadowElevation = 4f },
-            textAlign = TextAlign.Center,
-            color = HomeAccentDeep,
-            fontSize = 46.sp,
-            lineHeight = 48.sp,
-            fontWeight = FontWeight.Black,
-            letterSpacing = 2.sp
-        )
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Text(
+                text = "PLAY",
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center,
+                color = TitleLight,
+                fontSize = 68.sp,
+                lineHeight = 70.sp,
+                fontWeight = FontWeight.Black,
+                letterSpacing = 3.sp
+            )
+            Text(
+                text = "IN",
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center,
+                color = TitleWarm,
+                fontSize = 42.sp,
+                lineHeight = 44.sp,
+                fontWeight = FontWeight.ExtraBold,
+                fontStyle = FontStyle.Italic,
+                letterSpacing = 9.sp
+            )
+            Text(
+                text = "BLOCK",
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center,
+                color = TitleLight,
+                fontSize = 68.sp,
+                lineHeight = 70.sp,
+                fontWeight = FontWeight.Black,
+                letterSpacing = 2.sp
+            )
+        }
     }
 }
 
@@ -230,9 +254,12 @@ fun SettingsScreen(
     onDarkThemeChanged: (Boolean) -> Unit,
     onImageSourceChanged: (ImageSourceMode) -> Unit,
     onResetProgress: () -> Unit,
+    blockMotionPreset: BlockMotionSpeed = BlockMotionSpeed.BALANCED,
+    onBlockMotionPresetChanged: (BlockMotionSpeed) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var confirmReset by remember { mutableStateOf(false) }
+    var selectedBlockMotion by remember(blockMotionPreset) { mutableStateOf(blockMotionPreset) }
 
     Column(
         modifier = modifier.fillMaxSize().background(HomeCream)
@@ -267,6 +294,26 @@ fun SettingsScreen(
             icon = { Icon(Icons.Default.Image, contentDescription = null) },
             onClick = { onImageSourceChanged(ImageSourceMode.PRELOADED) }
         )
+
+        Spacer(Modifier.height(24.dp))
+        Text("Block Movement", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "Choose how quickly puzzle blocks glide into their new positions. Your choice is saved and applied to the puzzle automatically.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(Modifier.height(8.dp))
+        BlockMotionSpeed.values().forEach { preset ->
+            MotionPresetRow(
+                preset = preset,
+                selected = preset == selectedBlockMotion,
+                onClick = {
+                    selectedBlockMotion = preset
+                    onBlockMotionPresetChanged(preset)
+                }
+            )
+        }
 
         Spacer(Modifier.height(28.dp))
         OutlinedButton(onClick = { confirmReset = true }, modifier = Modifier.fillMaxWidth()) {
@@ -325,6 +372,46 @@ private fun SettingRow(label: String, checked: Boolean, onChanged: (Boolean) -> 
     }
 }
 
+private fun BlockMotionSpeed.displayTitle(): String = when (this) {
+    BlockMotionSpeed.RELAXED -> "Relaxed"
+    BlockMotionSpeed.BALANCED -> "Balanced"
+    BlockMotionSpeed.QUICK -> "Quick"
+}
+
+private fun BlockMotionSpeed.displaySubtitle(): String = when (this) {
+    BlockMotionSpeed.RELAXED -> "Slow and smooth movement"
+    BlockMotionSpeed.BALANCED -> "Comfortable default movement"
+    BlockMotionSpeed.QUICK -> "Fast and responsive movement"
+}
+
+@Composable
+private fun MotionPresetRow(
+    preset: BlockMotionSpeed,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp),
+        colors = CardDefaults.cardColors(containerColor = if (selected) HomeAccentSoft else MaterialTheme.colorScheme.surface)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(preset.displayTitle(), fontWeight = FontWeight.SemiBold)
+                Text(
+                    "${preset.displaySubtitle()} · ~${preset.durationMillis} ms",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            RadioButton(selected = selected, onClick = onClick)
+        }
+    }
+}
+
 @Composable
 fun HowToPlayScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
     Column(
@@ -350,7 +437,10 @@ fun HowToPlayScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
         Spacer(Modifier.height(16.dp))
         Text("9. The four controls below the puzzle are Timer, Grid Shift, Hint and Restart. The Journey starts with 1 Hint. Each Hint solves one random block/group step and counts as one move. Finish an Adventure within its optimal move target to earn +1 Hint, up to 3 stored Hints.", style = MaterialTheme.typography.bodyLarge)
         Spacer(Modifier.height(16.dp))
-        Text("10. Turn on Guides for numbered pieces. Arrange 1, 2, 3… from left to right, top to bottom. Guides are especially useful for similar-looking sky or blank pieces.", style = MaterialTheme.typography.bodyLarge)
+        Text("10. In Settings, Block Movement lets you choose Relaxed, Balanced, or Quick puzzle motion. Use Relaxed for a slower, smoother glide.", style = MaterialTheme.typography.bodyLarge)
+        Spacer(Modifier.height(16.dp))
+        Text("11. Turn on Guides for numbered pieces. Arrange 1, 2, 3… from left to right, top to bottom. Guides are especially useful for similar-looking sky or blank pieces.", style = MaterialTheme.typography.bodyLarge)
+
     }
 }
 

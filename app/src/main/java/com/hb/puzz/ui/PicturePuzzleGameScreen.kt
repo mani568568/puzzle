@@ -56,6 +56,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.hb.puzz.data.BlockMotionSpeed
 import com.hb.puzz.data.GameSettings
 import com.hb.puzz.data.images.ImageSourceMode
 import com.hb.puzz.data.images.PuzzleImageRepository
@@ -69,20 +70,22 @@ fun PicturePuzzleGameScreen(
     imageRepository: PuzzleImageRepository, imageSource: ImageSourceMode,
     soundEnabled: Boolean, hapticsEnabled: Boolean,
     onBack: () -> Unit, onHome: () -> Unit, onNextLevel: (Int) -> Unit,
+    replayMode: Boolean = false,
     modifier: Modifier = Modifier
 ) {
-    val factory = remember(levelId, gridSize) {
+    val factory = remember(levelId, gridSize, replayMode) {
         object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T =
-                PuzzleGameViewModel(levelId, gridSize, settings, imageRepository, imageSource) as T
+                PuzzleGameViewModel(levelId, gridSize, settings, imageRepository, imageSource, replayMode) as T
         }
     }
-    val vm: PuzzleGameViewModel = viewModel(key = "puzzle-$levelId-$gridSize", factory = factory)
+    val vm: PuzzleGameViewModel = viewModel(key = "puzzle-$levelId-$gridSize-replay-$replayMode", factory = factory)
     val ui by vm.state.collectAsStateWithLifecycle()
     val wallet by settings.coinBalanceFlow.collectAsStateWithLifecycle(initialValue = 0)
     val crystals by settings.crystalBalanceFlow.collectAsStateWithLifecycle(initialValue = GameSettings.INITIAL_CRYSTALS)
     val hints by settings.hintBalanceFlow.collectAsStateWithLifecycle(initialValue = GameSettings.INITIAL_HINTS)
+    val blockMotion by settings.blockMotionSpeedFlow.collectAsStateWithLifecycle(initialValue = BlockMotionSpeed.BALANCED)
     var confirmRestart by remember { mutableStateOf(false) }
     var rewardInfo by remember { mutableStateOf(false) }
     var crystalInfo by remember { mutableStateOf(false) }
@@ -110,7 +113,7 @@ fun PicturePuzzleGameScreen(
             delay(140)
             celebrationBurst.animateTo(
                 targetValue = 1f,
-                animationSpec = tween(1950, easing = LinearOutSlowInEasing)
+                animationSpec = tween(3950, easing = LinearOutSlowInEasing)
             )
         } else {
             celebrationBurst.snapTo(0f)
@@ -201,6 +204,7 @@ fun PicturePuzzleGameScreen(
                                         2 -> { if (soundEnabled) feedback.playSolvedSound(); if (hapticsEnabled) feedback.buzzForSolved() }
                                     }
                                 },
+                                motionDurationMs = blockMotion.durationMillis,
                                 modifier = Modifier.fillMaxSize(),
                                 inputEnabled = !ui.solved && (!ui.started || ui.running)
                             )
@@ -308,8 +312,11 @@ fun PicturePuzzleGameScreen(
                             }
                             Button(
                                 onClick = {
-                                    if (levelId == PuzzleLevel.maxLevelId) onHome()
-                                    else onNextLevel(levelId + 1)
+                                    when {
+                                        replayMode -> onBack()
+                                        levelId == PuzzleLevel.maxLevelId -> onHome()
+                                        else -> onNextLevel(levelId + 1)
+                                    }
                                 },
                                 modifier = Modifier
                                     .fillMaxWidth(0.52f)
@@ -322,12 +329,16 @@ fun PicturePuzzleGameScreen(
                                 elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp)
                             ) {
                                 Text(
-                                    if (levelId == PuzzleLevel.maxLevelId) "Home" else "Level ${levelId + 1}",
+                                    when {
+                                        replayMode -> "Back to History"
+                                        levelId == PuzzleLevel.maxLevelId -> "Home"
+                                        else -> "Level ${levelId + 1}"
+                                    },
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.ExtraBold,
                                     color = Color.White
                                 )
-                                if (levelId != PuzzleLevel.maxLevelId) {
+                                if (!replayMode && levelId != PuzzleLevel.maxLevelId) {
                                     Spacer(Modifier.width(6.dp))
                                     Icon(Icons.Default.ArrowForward, contentDescription = null, tint = Color.White)
                                 }
@@ -811,7 +822,7 @@ private fun FinishedSparkleBurst(
 
         // Strong opening pop, then a slower fall so the celebration remains visible.
         val pop = (t / 0.20f).coerceIn(0f, 1f)
-        val fade = if (t < 0.72f) 1f else (1f - ((t - 0.72f) / 0.28f)).coerceIn(0f, 1f)
+        val fade = if (t < 0.88f) 1f else (1f - ((t - 0.88f) / 0.12f)).coerceIn(0f, 1f)
         val visibleAlpha = pop * fade
 
         val palette = listOf(

@@ -32,13 +32,14 @@ import java.util.Date
 
 private const val JOURNAL_ADVENTURES_PER_MILESTONE = 4
 
-private enum class JournalFilter { ALL, COMPLETED, MILESTONES }
+private enum class JournalFilter { ALL, FINISHED, MILESTONES }
 
 @Composable
 fun JourneyHistoryScreen(
     home: HomeSnapshot,
     onBack: () -> Unit,
     onOpenAdventure: (Int) -> Unit,
+    onReplayAdventure: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var filterName by rememberSaveable { mutableStateOf(JournalFilter.ALL.name) }
@@ -69,8 +70,8 @@ fun JourneyHistoryScreen(
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
             }
             Column(Modifier.weight(1f)) {
-                Text("Journey Journal", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                Text("Your Adventures, Milestones and personal stats",
+                Text("Adventure History", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Text("Replay finished levels, revisit milestones, and compare your best runs",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
@@ -94,13 +95,13 @@ fun JourneyHistoryScreen(
             wallet = home.coins
         )
 
-        Text("Explore your journey", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Text("Past Adventures", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             JournalFilterButton("All", filter == JournalFilter.ALL, Modifier.weight(1f)) {
                 filterName = JournalFilter.ALL.name
             }
-            JournalFilterButton("Completed", filter == JournalFilter.COMPLETED, Modifier.weight(1f)) {
-                filterName = JournalFilter.COMPLETED.name
+            JournalFilterButton("Finished", filter == JournalFilter.FINISHED, Modifier.weight(1f)) {
+                filterName = JournalFilter.FINISHED.name
             }
             JournalFilterButton("Milestones", filter == JournalFilter.MILESTONES, Modifier.weight(1f)) {
                 filterName = JournalFilter.MILESTONES.name
@@ -122,17 +123,17 @@ fun JourneyHistoryScreen(
                         ready = ready,
                         unlocked = unlocked,
                         expanded = expandedAdventure == level.id,
-                        canReplay = completed && home.saved == null,
-                        onToggle = {
+                                                onToggle = {
                             expandedAdventure = if (expandedAdventure == level.id) null else level.id
                         },
-                        onOpenAdventure = { onOpenAdventure(level.id) }
+                        onOpenAdventure = { onOpenAdventure(level.id) },
+                        onReplayAdventure = { onReplayAdventure(level.id) }
                     )
                 }
                 if (level.id % JOURNAL_ADVENTURES_PER_MILESTONE == 0) {
                     val number = level.id / JOURNAL_ADVENTURES_PER_MILESTONE
                     val reached = isMilestoneReached(number, home.completed)
-                    if (filter == JournalFilter.ALL || (filter == JournalFilter.COMPLETED && reached)) {
+                    if (filter == JournalFilter.ALL || (filter == JournalFilter.FINISHED && reached)) {
                         MilestoneJournalCard(number = number, reached = reached)
                     }
                 }
@@ -164,7 +165,7 @@ private fun JourneySummaryCard(
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically) {
                 Column {
-                    Text("Your Journey", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Text("Progress Overview", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                     Text("$completed of $maxAdventure Adventures completed",
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
@@ -247,9 +248,9 @@ private fun AdventureJournalCard(
     ready: Boolean,
     unlocked: Boolean,
     expanded: Boolean,
-    canReplay: Boolean,
     onToggle: () -> Unit,
-    onOpenAdventure: () -> Unit
+    onOpenAdventure: () -> Unit,
+    onReplayAdventure: () -> Unit
 ) {
     val container = when {
         inProgress -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.82f)
@@ -295,7 +296,7 @@ private fun AdventureJournalCard(
                     Text(
                         when {
                             inProgress -> "In progress · tap for details"
-                            completed -> "Completed · tap for stats"
+                            completed -> "Finished · tap for stats"
                             ready -> "Ready for you"
                             else -> "Locked"
                         },
@@ -304,6 +305,20 @@ private fun AdventureJournalCard(
                     )
                 }
                 StatusDot(completed = completed, inProgress = inProgress, ready = ready)
+            }
+
+            if (completed && !inProgress) {
+                OutlinedButton(
+                    onClick = onReplayAdventure,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
+                    shape = CircleShape
+                ) {
+                    Icon(Icons.Default.PlayArrow, contentDescription = null)
+                    Spacer(Modifier.width(6.dp))
+                    Text("Replay Adventure")
+                }
             }
 
             if (expanded) {
@@ -315,13 +330,13 @@ private fun AdventureJournalCard(
                             MiniStat("Best moves", history.bestMoves.takeIf { it > 0 }?.toString() ?: "—", Modifier.weight(1f))
                             MiniStat("Best coins", history.bestReward.takeIf { it > 0 }?.toString() ?: "—", Modifier.weight(1f))
                         }
-                        val completionText = if (history.completions == 1) "Completed once" else "Completed ${history.completions} times"
+                        val completionText = if (history.completions == 1) "Finished once" else "Finished ${history.completions} times"
                         val date = history.lastCompletedAt.takeIf { it > 0 }?.let(::formatJournalDate)
                         Text(if (date != null) "$completionText · Last completed $date" else completionText,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     } else if (completed) {
-                        Text("Adventure completed. Detailed time and move history will be tracked from your next completion.",
+                        Text("Adventure finished. Detailed time and move history will be tracked from your next finish.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     } else {
@@ -341,12 +356,7 @@ private fun AdventureJournalCard(
                             Spacer(Modifier.width(6.dp))
                             Text("Start Adventure")
                         }
-                        canReplay -> OutlinedButton(onClick = onOpenAdventure, modifier = Modifier.fillMaxWidth()) {
-                            Text("Replay Adventure")
-                        }
-                        completed -> Text("Finish your current Adventure before starting a replay.",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+
                     }
                 }
             }
@@ -358,7 +368,7 @@ private fun AdventureJournalCard(
 private fun StatusDot(completed: Boolean, inProgress: Boolean, ready: Boolean) {
     val text = when {
         inProgress -> "PLAYING"
-        completed -> "DONE"
+        completed -> "FINISHED"
         ready -> "READY"
         else -> "LOCKED"
     }

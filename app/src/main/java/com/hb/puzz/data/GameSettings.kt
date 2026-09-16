@@ -16,6 +16,17 @@ import java.util.UUID
 private val Context.picturePuzzleDataStore by preferencesDataStore(name = "cozy_blocks_settings")
 enum class PuzzleClockMode { COUNTDOWN, STOPWATCH }
 
+enum class BlockMotionSpeed(val storedValue: String, val durationMillis: Int) {
+    RELAXED("relaxed", 420),
+    BALANCED("balanced", 320),
+    QUICK("quick", 240);
+
+    companion object {
+        fun fromStored(raw: String?): BlockMotionSpeed =
+            values().firstOrNull { it.storedValue == raw } ?: BALANCED
+    }
+}
+
 data class PuzzleSession(
     val levelId: Int,
     val gridSize: Int,
@@ -60,6 +71,7 @@ data class HomeSnapshot(
     val haptics: Boolean,
     val dark: Boolean,
     val source: ImageSourceMode,
+    val blockMotion: BlockMotionSpeed,
     val history: List<AdventureHistoryEntry>
 )
 
@@ -89,6 +101,7 @@ class GameSettings(context: Context) {
     private val hapticsKey = booleanPreferencesKey("haptics_enabled")
     private val darkKey = booleanPreferencesKey("dark_theme")
     private val sourceKey = stringPreferencesKey("image_source")
+    private val blockMotionKey = stringPreferencesKey("block_motion_speed_v1")
 
     private fun historyKey(levelId: Int) = stringPreferencesKey("adventure_history_$levelId")
     private fun bestCoinsKey(levelId: Int) = intPreferencesKey("best_coins_$levelId")
@@ -105,6 +118,7 @@ class GameSettings(context: Context) {
             haptics = p[hapticsKey] ?: true,
             dark = p[darkKey] ?: false,
             source = p[sourceKey]?.let(ImageSourceMode::fromStored) ?: ImageSourceMode.PRELOADED,
+            blockMotion = BlockMotionSpeed.fromStored(p[blockMotionKey]),
             history = decodeHistory(p, completed)
         )
     }
@@ -118,6 +132,9 @@ class GameSettings(context: Context) {
     val darkThemeFlow = store.data.map { it[darkKey] ?: false }
     val imageSourceFlow = store.data.map {
         it[sourceKey]?.let(ImageSourceMode::fromStored) ?: ImageSourceMode.PRELOADED
+    }
+    val blockMotionSpeedFlow = store.data.map {
+        BlockMotionSpeed.fromStored(it[blockMotionKey])
     }
     val savedSessionFlow = store.data.map(::decodeSession)
     suspend fun loadSession() = decodeSession(store.data.first())
@@ -348,6 +365,9 @@ class GameSettings(context: Context) {
     suspend fun updateHapticsEnabled(v: Boolean) { store.edit { it[hapticsKey] = v } }
     suspend fun updateDarkTheme(v: Boolean) { store.edit { it[darkKey] = v } }
     suspend fun updateImageSource(v: ImageSourceMode) { store.edit { it[sourceKey] = v.storedValue } }
+    suspend fun updateBlockMotionSpeed(v: BlockMotionSpeed) {
+        store.edit { it[blockMotionKey] = v.storedValue }
+    }
     suspend fun resetProgress() {
         store.edit { p ->
             p.remove(completedKey)

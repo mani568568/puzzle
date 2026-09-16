@@ -23,8 +23,10 @@ private object Routes {
     const val HOW_TO = "how_to"
     const val HISTORY = "history"
     const val GAME_PATTERN = "game/{levelId}/{gridSize}"
+    const val REPLAY_PATTERN = "replay/{levelId}/{gridSize}"
 
     fun game(levelId: Int, gridSize: Int) = "game/$levelId/$gridSize"
+    fun replay(levelId: Int, gridSize: Int) = "replay/$levelId/$gridSize"
 }
 
 @Composable
@@ -107,6 +109,10 @@ fun CozyBlocksApp(settings: GameSettings) {
                     val savedForAdventure = savedSession?.takeIf { it.levelId == adventureId }
                     val gridSize = savedForAdventure?.gridSize ?: adventure.pickGridSize()
                     navController.navigate(Routes.game(adventureId, gridSize))
+                },
+                onReplayAdventure = { adventureId ->
+                    val adventure = PuzzleLevel.requireLevel(adventureId)
+                    navController.navigate(Routes.replay(adventureId, adventure.pickGridSize()))
                 }
             )
         }
@@ -123,6 +129,10 @@ fun CozyBlocksApp(settings: GameSettings) {
                 onHapticsChanged = { enabled -> scope.launch { settings.updateHapticsEnabled(enabled) } },
                 onDarkThemeChanged = { enabled -> scope.launch { settings.updateDarkTheme(enabled) } },
                 onImageSourceChanged = { mode -> scope.launch { settings.updateImageSource(mode) } },
+                blockMotionPreset = home.blockMotion,
+                onBlockMotionPresetChanged = { speed ->
+                    scope.launch { settings.updateBlockMotionSpeed(speed) }
+                },
                 onResetProgress = {
                     scope.launch {
                         settings.resetProgress()
@@ -153,6 +163,7 @@ fun CozyBlocksApp(settings: GameSettings) {
                 imageSource = imageSource,
                 soundEnabled = soundEnabled,
                 hapticsEnabled = hapticsEnabled,
+                replayMode = false,
                 onBack = { navController.popBackStack() },
                 onHome = { goHome() },
                 onNextLevel = { nextLevel ->
@@ -164,5 +175,34 @@ fun CozyBlocksApp(settings: GameSettings) {
                 }
             )
         }
+
+        composable(
+            route = Routes.REPLAY_PATTERN,
+            arguments = listOf(
+                navArgument("levelId") { type = NavType.IntType },
+                navArgument("gridSize") { type = NavType.IntType }
+            )
+        ) { entry ->
+            val levelId = (entry.arguments?.getInt("levelId") ?: 1)
+                .coerceIn(1, PuzzleLevel.maxLevelId)
+            val level = PuzzleLevel.requireLevel(levelId)
+            val requestedGridSize = entry.arguments?.getInt("gridSize") ?: level.gridSize
+            val gridSize = requestedGridSize.takeIf(level::acceptsGridSize) ?: level.gridSize
+
+            PicturePuzzleGameScreen(
+                levelId = levelId,
+                gridSize = gridSize,
+                settings = settings,
+                imageRepository = imageRepository,
+                imageSource = imageSource,
+                soundEnabled = soundEnabled,
+                hapticsEnabled = hapticsEnabled,
+                replayMode = true,
+                onBack = { navController.popBackStack() },
+                onHome = { goHome() },
+                onNextLevel = { navController.popBackStack() }
+            )
+        }
+
     }
 }

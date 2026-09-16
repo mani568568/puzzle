@@ -69,6 +69,7 @@ fun PuzzleBoard(
     celebratingTileIds: Set<Int>,
     celebrationVersion: Int,
     onGroupDropped: (anchorTileId: Int, targetPosition: Int) -> Unit,
+    motionDurationMs: Int = 320,
     modifier: Modifier = Modifier,
     inputEnabled: Boolean = true
 ) {
@@ -174,12 +175,12 @@ fun PuzzleBoard(
                     val isDragging = tileId in draggingGroupIds
                     val animatedX by animateFloatAsState(
                         targetValue = targetX,
-                        animationSpec = tween(280, easing = FastOutSlowInEasing),
+                        animationSpec = tween(motionDurationMs.coerceIn(180, 600), easing = FastOutSlowInEasing),
                         label = "tile-x-$tileId"
                     )
                     val animatedY by animateFloatAsState(
                         targetValue = targetY,
-                        animationSpec = tween(280, easing = FastOutSlowInEasing),
+                        animationSpec = tween(motionDurationMs.coerceIn(180, 600), easing = FastOutSlowInEasing),
                         label = "tile-y-$tileId"
                     )
                     val dragScale by animateFloatAsState(
@@ -334,12 +335,12 @@ fun PuzzleBoard(
 
                     val animatedX by animateFloatAsState(
                         targetValue = baseX,
-                        animationSpec = tween(280, easing = FastOutSlowInEasing),
+                        animationSpec = tween(motionDurationMs.coerceIn(180, 600), easing = FastOutSlowInEasing),
                         label = "group-x-$groupKey"
                     )
                     val animatedY by animateFloatAsState(
                         targetValue = baseY,
-                        animationSpec = tween(280, easing = FastOutSlowInEasing),
+                        animationSpec = tween(motionDurationMs.coerceIn(180, 600), easing = FastOutSlowInEasing),
                         label = "group-y-$groupKey"
                     )
                     val groupScale by animateFloatAsState(

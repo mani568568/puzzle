@@ -37,7 +37,8 @@ class PuzzleGameViewModel(
     gridSize: Int,
     private val settings: GameSettings,
     private val repository: PuzzleImageRepository,
-    private val preferredSource: ImageSourceMode
+    private val preferredSource: ImageSourceMode,
+    private val replayMode: Boolean = false
 ) : ViewModel() {
     var engine: PuzzleEngine = PuzzleEngine(gridSize)
         private set
@@ -88,7 +89,7 @@ class PuzzleGameViewModel(
         loadJob = viewModelScope.launch {
             mutable.value = mutable.value.copy(loading = true, error = null)
             try {
-                val saved = settings.loadSession()
+                val saved = if (replayMode) null else settings.loadSession()
                 if (saved?.levelId == levelId && saved.gridSize == engine.gridSize && engine.restorePositions(saved.positions)) {
                     session = saved
                     // Migrate pristine saves created by older shuffle logic. Those saves could
@@ -156,6 +157,7 @@ class PuzzleGameViewModel(
         moveCount = mutable.value.moves, elapsedMillis = clock.elapsedMillis())
 
     private fun checkpoint() {
+        if (replayMode) return
         val snap = snapshot()
         writes.trySend { settings.saveSession(snap); mutable.value = mutable.value.copy(saveError = false) }
     }
@@ -171,6 +173,10 @@ class PuzzleGameViewModel(
             return
         }
         pause()
+        if (replayMode) {
+            onSaved()
+            return
+        }
         val snap = snapshot()
         val solved = mutable.value.solved
         writes.trySend {
@@ -313,8 +319,9 @@ class PuzzleGameViewModel(
         clock.pause()
         val snap = snapshot()
         writes.trySend {
-            // A crash between these transactions leaves a solved session that can finish on restore.
-            settings.saveSession(snap)
+            // Replay sessions intentionally never replace the player's normal saved Adventure.
+            // Completion still updates history and can award only genuine score improvement.
+            if (!replayMode) settings.saveSession(snap)
             val receipt = settings.completeSession(snap)
             mutable.value = mutable.value.copy(receipt = receipt, saveError = false)
         }
