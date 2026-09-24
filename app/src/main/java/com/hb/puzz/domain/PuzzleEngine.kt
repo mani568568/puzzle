@@ -320,9 +320,9 @@ class PuzzleEngine(
     }
 
     companion object {
-        /** Difficulty size N maps to an N x (N+1) portrait grid: one extra row. */
+        /** Difficulty size N maps to an N x (N+2) portrait grid: two extra rows. */
         fun columnsForSize(gridSize: Int): Int = gridSize
-        fun rowsForSize(gridSize: Int): Int = gridSize + 1
+        fun rowsForSize(gridSize: Int): Int = gridSize + 2
         fun tileCountForSize(gridSize: Int): Int = columnsForSize(gridSize) * rowsForSize(gridSize)
     }
 }

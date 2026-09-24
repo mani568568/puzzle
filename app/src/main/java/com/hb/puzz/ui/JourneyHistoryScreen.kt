@@ -78,7 +78,8 @@ fun JourneyHistoryScreen(
             VibrantCircleAction(
                 onClick = onBack,
                 modifier = Modifier.padding(top = 8.dp).size(44.dp),
-                brush = VibrantBlueBrush
+                brush = VibrantBlueBrush,
+                motion = ActionMotion.SHRINK
             ) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
             }
@@ -255,7 +256,8 @@ private fun JournalFilterButton(label: String, selected: Boolean, modifier: Modi
         brush = if (selected) VibrantBlueBrush else Brush.linearGradient(
             listOf(Color(0xFFFFD7E5), Color(0xFFFFE7B8), Color(0xFFDDF7F0))
         ),
-        contentColor = if (selected) Color.White else Color(0xFF563B48)
+        contentColor = if (selected) Color.White else Color(0xFF563B48),
+        motion = ActionMotion.SHRINK
     ) {
         Text(label, maxLines = 1, fontWeight = FontWeight.Bold)
     }
@@ -340,7 +342,8 @@ private fun AdventureJournalCard(
                         .padding(start = 12.dp, end = 12.dp, bottom = 12.dp)
                         .height(52.dp),
                     shape = CircleShape,
-                    brush = VibrantPinkBrush
+                    brush = VibrantPinkBrush,
+                    motion = ActionMotion.BOUNCE_UP
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color.White)
@@ -379,7 +382,8 @@ private fun AdventureJournalCard(
                             onClick = onOpenAdventure,
                             modifier = Modifier.fillMaxWidth().height(52.dp),
                             shape = CircleShape,
-                            brush = VibrantBlueBrush
+                            brush = VibrantBlueBrush,
+                            motion = ActionMotion.BOUNCE_UP
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color.White)
@@ -391,7 +395,8 @@ private fun AdventureJournalCard(
                             onClick = onOpenAdventure,
                             modifier = Modifier.fillMaxWidth().height(52.dp),
                             shape = CircleShape,
-                            brush = VibrantMintBrush
+                            brush = VibrantMintBrush,
+                            motion = ActionMotion.BOUNCE_UP
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color.White)

@@ -81,7 +81,7 @@ fun PuzzleBoard(
     }
     val groupedTileIds = remember(connectedGroups) { connectedGroups.flatten().toSet() }
 
-    val surface = MaterialTheme.colorScheme.surface
+    val surface = Color(0xFFFFF6E8)
     val gridBorder = MaterialTheme.colorScheme.primary.copy(alpha = 0.65f)
     val tileDivider = MaterialTheme.colorScheme.surface
     val dragAccent = Color(0xFF67C9D7)
@@ -444,18 +444,18 @@ fun PuzzleBoard(
                                     measure.getSegment(0f, distance, trail, true)
                                     drawPath(
                                         trail,
-                                        Color(0xFFFFD86B).copy(alpha = alpha * 0.18f),
-                                        style = Stroke(10.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                                        Color(0xFFFFD86B).copy(alpha = alpha * 0.22f),
+                                        style = Stroke(13.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
                                     )
                                     drawPath(
                                         trail,
                                         Color(0xFFF6C554).copy(alpha = alpha),
-                                        style = Stroke(2.8.dp.toPx(), cap = StrokeCap.Butt, join = StrokeJoin.Miter)
+                                        style = Stroke(4.2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
                                     )
                                     drawPath(
                                         trail,
                                         Color.White.copy(alpha = alpha * 0.94f),
-                                        style = Stroke(0.9.dp.toPx(), cap = StrokeCap.Butt, join = StrokeJoin.Miter)
+                                        style = Stroke(1.3.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
                                     )
                                 }
                                 remainingLength -= measure.length
@@ -469,13 +469,13 @@ fun PuzzleBoard(
                                 contourPaths.forEach { contour ->
                                     drawPath(
                                         contour,
-                                        Color(0xFFFFD86B).copy(alpha = lockPulse * 0.18f),
-                                        style = Stroke(12.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                                        Color(0xFFFFD86B).copy(alpha = lockPulse * 0.24f),
+                                        style = Stroke(15.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
                                     )
                                     drawPath(
                                         contour,
-                                        Color(0xFFFFE99C).copy(alpha = lockPulse * 0.82f),
-                                        style = Stroke(2.1.dp.toPx(), cap = StrokeCap.Butt, join = StrokeJoin.Miter)
+                                        Color(0xFFFFE99C).copy(alpha = lockPulse * 0.92f),
+                                        style = Stroke(3.6.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
                                     )
                                 }
                             }

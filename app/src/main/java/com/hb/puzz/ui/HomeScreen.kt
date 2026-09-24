@@ -136,7 +136,8 @@ fun HomeScreen(
                 .align(Alignment.TopEnd)
                 .padding(top = 2.dp, end = 18.dp)
                 .size(48.dp),
-            brush = VibrantPinkBrush
+            brush = VibrantPinkBrush,
+            motion = ActionMotion.TILT
         ) {
             Icon(Icons.Default.Settings, contentDescription = "Settings", tint = Color.White)
         }
@@ -148,7 +149,8 @@ fun HomeScreen(
                 .padding(20.dp)
                 .size(58.dp),
             shape = RoundedCornerShape(20.dp),
-            brush = VibrantBlueBrush
+            brush = VibrantBlueBrush,
+            motion = ActionMotion.BOUNCE_UP
         ) {
             Icon(Icons.Default.History, contentDescription = "Adventure History", tint = Color.White)
         }
@@ -221,7 +223,8 @@ private fun CurrentLevelButtonCard(
             .fillMaxWidth()
             .height(84.dp),
         shape = RoundedCornerShape(28.dp),
-        brush = VibrantOrangeBrush
+        brush = VibrantOrangeBrush,
+        motion = ActionMotion.BOUNCE_UP
     ) {
         Row(
             modifier = Modifier
@@ -330,7 +333,8 @@ fun SettingsScreen(
             onClick = { confirmReset = true },
             modifier = Modifier.fillMaxWidth().height(52.dp),
             shape = RoundedCornerShape(18.dp),
-            brush = VibrantPinkBrush
+            brush = VibrantPinkBrush,
+            motion = ActionMotion.SHAKE
         ) {
             Text("Reset Game Progress", color = Color.White, fontWeight = FontWeight.Bold)
         }
@@ -367,7 +371,8 @@ private fun ImageSourceRow(
         brush = if (selected) VibrantBlueBrush else Brush.linearGradient(
             listOf(Color(0xFFFFF3CF), Color(0xFFE8F8FF))
         ),
-        contentColor = if (selected) Color.White else HomeAccentDeep
+        contentColor = if (selected) Color.White else HomeAccentDeep,
+        motion = ActionMotion.SHRINK
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(12.dp),
@@ -424,7 +429,8 @@ private fun MotionPresetRow(
         brush = if (selected) VibrantMintBrush else Brush.linearGradient(
             listOf(Color(0xFFFFE8F0), Color(0xFFEAF7FF))
         ),
-        contentColor = if (selected) Color.White else HomeAccentDeep
+        contentColor = if (selected) Color.White else HomeAccentDeep,
+        motion = ActionMotion.PULSE
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(12.dp),
@@ -488,7 +494,8 @@ private fun ScreenHeader(title: String, onBack: () -> Unit) {
         VibrantCircleAction(
             onClick = onBack,
             modifier = Modifier.size(44.dp),
-            brush = VibrantBlueBrush
+            brush = VibrantBlueBrush,
+            motion = ActionMotion.SHRINK
         ) {
             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
         }

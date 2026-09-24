@@ -17,6 +17,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -49,6 +50,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -143,10 +145,13 @@ fun PicturePuzzleGameScreen(
     DisposableEffect(feedback) { onDispose { feedback.release() } }
     BackHandler { vm.saveAndLeave(onBack) }
 
-    val darkLavenderTop = Color(0xFF68518A)
-    val darkLavenderBottom = Color(0xFF44305F)
-    val softPanel = Color(0xFFFFFCF4)
-    val lightLavenderPanel = Color(0xFFD9CCF1)
+    val creamTop = Color(0xFFFFF9EF)
+    val creamMid = Color(0xFFFFF2DF)
+    val creamBottom = Color(0xFFF5E7D2)
+    val softPanel = Color(0xFFEAFBFA)
+    val glassAqua = Color(0xFFD8F5F3)
+    val glassAquaDeep = Color(0xFFBFEAE8)
+    val glassTealDark = Color(0xFF0A4E52)
 
     BoxWithConstraints(
         modifier
@@ -154,9 +159,9 @@ fun PicturePuzzleGameScreen(
             .background(
                 Brush.verticalGradient(
                     listOf(
-                        darkLavenderTop,
-                        Color(0xFF5A4378),
-                        darkLavenderBottom
+                        creamTop,
+                        creamMid,
+                        creamBottom
                     )
                 )
             )
@@ -168,57 +173,50 @@ fun PicturePuzzleGameScreen(
             Row(
                 Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 VibrantCircleAction(
                     onClick = { vm.saveAndLeave(onBack) },
-                    modifier = Modifier.size(44.dp),
-                    brush = VibrantBlueBrush
+                    modifier = Modifier.size(42.dp),
+                    brush = Brush.linearGradient(
+                        listOf(Color(0xFF35C6D0), Color(0xFF1F9DA6), Color(0xFF5F74F3))
+                    ),
+                    motion = ActionMotion.SHRINK
                 ) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, "Save and go back", tint = Color.White)
                 }
-                CompactTimeCard(
+                StandaloneTimer(
                     elapsedMillis = ui.elapsedMillis,
-                    modifier = Modifier.weight(1.24f)
+                    modifier = Modifier.widthIn(min = 148.dp, max = 172.dp)
                 )
-                CompactStatCard(
-                    value = "${ui.moves}",
-                    modifier = Modifier.weight(0.76f),
-                    background = Color(0xFFFFECDC),
-                    accentBrush = Brush.horizontalGradient(listOf(Color(0xFFFF8A65), Color(0xFFFFC04D))),
-                    icon = { Icon(Icons.Default.SwapHoriz, contentDescription = null, tint = Color(0xFFB65A1D), modifier = Modifier.size(17.dp)) },
-                    valueColor = Color(0xFF4B2D0F)
-                )
-                CompactResourceCard(
+                ResourceNotificationAction(
                     value = crystals,
-                    modifier = Modifier.weight(0.82f),
-                    background = Color(0xFFE5F6FF),
-                    accentBrush = Brush.horizontalGradient(listOf(Color(0xFF7DE2FF), Color(0xFF4E9BFF))),
-                    icon = { CrystalIcon(19.dp) },
+                    description = "$crystals crystals. Crystal Power",
+                    badgeColor = Color(0xFF3FCBEA),
+                    motion = ActionMotion.PULSE,
                     onClick = { crystalInfo = true },
-                    valueColor = Color(0xFF1B335C)
+                    icon = { CrystalIcon(29.dp) }
                 )
-                CompactResourceCard(
-                    value = wallet,
-                    modifier = Modifier.weight(0.98f),
-                    background = Color(0xFFFFF2BF),
-                    accentBrush = Brush.horizontalGradient(listOf(Color(0xFFFFD65A), Color(0xFFFF9A3D))),
-                    icon = { GoldCoinIcon(Modifier.size(19.dp)) },
+                ResourceNotificationAction(
+                    value = wallet.coerceAtMost(999999),
+                    description = "$wallet gold coins. Reward details",
+                    badgeColor = Color(0xFFFFB52E),
+                    motion = ActionMotion.BOUNCE_UP,
                     onClick = { rewardInfo = true },
-                    valueColor = Color(0xFF5A3B00)
+                    icon = { GoldCoinIcon(Modifier.size(29.dp)) }
                 )
             }
             // The puzzle itself is now a true rectangular grid: fewer columns and more rows.
             // Match the board footprint to that logical geometry so cells remain balanced and
             // the puzzle uses substantially more vertical screen space down toward the controls.
             val puzzleAspectRatio = (vm.engine.gridColumns.toFloat() / vm.engine.gridRows.toFloat())
-                .coerceIn(0.76f, 0.82f)
+                .coerceIn(0.58f, 0.68f)
             // Keep the live puzzle framed while playing, but remove that outer board frame
             // completely during the magical finished transformation so no extra oval/outline
             // remains behind the final finished card.
             val puzzleFrameShape = RoundedCornerShape(9.dp)
             val puzzleContentShape = RoundedCornerShape(7.dp)
-            val puzzleFrameColor = Color(0xFFF4EEE5)
+            val puzzleFrameColor = Color(0xFFF7EEDB)
             val boardContent: @Composable BoxScope.() -> Unit = {
                 when {
                     ui.loading -> CircularProgressIndicator()
@@ -227,7 +225,8 @@ fun PicturePuzzleGameScreen(
                         VibrantAction(
                             onClick = vm::load,
                             modifier = Modifier.height(48.dp).fillMaxWidth(0.55f),
-                            brush = VibrantOrangeBrush
+                            brush = VibrantOrangeBrush,
+                            motion = ActionMotion.BOUNCE_UP
                         ) { Text("Try again", color = Color.White, fontWeight = FontWeight.Bold) }
                     }
                     ui.image != null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -282,7 +281,7 @@ fun PicturePuzzleGameScreen(
             if (ui.solved) {
                 Box(
                     Modifier
-                        .fillMaxWidth()
+                        .fillMaxWidth(0.80f)
                         .aspectRatio(puzzleAspectRatio),
                     contentAlignment = Alignment.Center,
                     content = boardContent
@@ -292,7 +291,7 @@ fun PicturePuzzleGameScreen(
                     Modifier.fillMaxWidth(),
                     shape = puzzleFrameShape,
                     color = puzzleFrameColor,
-                    border = BorderStroke(1.6.dp, Color(0xFFD9D0C7)),
+                    border = BorderStroke(2.dp, Color(0xFF111111)),
                     tonalElevation = 0.dp,
                     shadowElevation = 5.dp
                 ) {
@@ -302,7 +301,7 @@ fun PicturePuzzleGameScreen(
                             .fillMaxWidth()
                             .aspectRatio(puzzleAspectRatio)
                             .clip(puzzleContentShape)
-                            .background(MaterialTheme.colorScheme.surface),
+                            .background(Color(0xFFFFF6E8)),
                         contentAlignment = Alignment.Center,
                         content = boardContent
                     )
@@ -310,10 +309,10 @@ fun PicturePuzzleGameScreen(
             }
             if (ui.solved) {
                 Surface(
-                    Modifier.fillMaxWidth(0.88f),
+                    Modifier.fillMaxWidth(0.80f),
                     shape = RoundedCornerShape(24.dp),
-                    color = softPanel,
-                    border = BorderStroke(1.4.dp, Color(0xFFD9D0C7)),
+                    color = Color(0xFFE6F8F7),
+                    border = BorderStroke(1.3.dp, Color(0xFF7ECBCB)),
                     tonalElevation = 0.dp,
                     shadowElevation = 0.dp
                 ) {
@@ -327,14 +326,14 @@ fun PicturePuzzleGameScreen(
                                 "Finishing your picture…",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
+                                color = glassTealDark
                             )
                         } else {
                             Text(
                                 "Adventure Finished!",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.ExtraBold,
-                                color = MaterialTheme.colorScheme.primary
+                                color = glassTealDark
                             )
                         }
 
@@ -375,7 +374,8 @@ fun PicturePuzzleGameScreen(
                                     .fillMaxWidth(0.52f)
                                     .height(52.dp),
                                 shape = RoundedCornerShape(22.dp),
-                                brush = VibrantOrangeBrush
+                                brush = VibrantOrangeBrush,
+                                motion = ActionMotion.BOUNCE_UP
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(
@@ -389,7 +389,7 @@ fun PicturePuzzleGameScreen(
                                         color = Color.White
                                     )
                                     if (!replayMode && levelId != PuzzleLevel.maxLevelId) {
-                                        Spacer(Modifier.width(6.dp))
+                                        Spacer(Modifier.width(5.dp))
                                         Icon(Icons.Default.ArrowForward, contentDescription = null, tint = Color.White)
                                     }
                                 }
@@ -408,96 +408,101 @@ fun PicturePuzzleGameScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 10.dp, vertical = 14.dp)
-                        .clip(RoundedCornerShape(20.dp))
-                        .background(lightLavenderPanel)
+                        .padding(horizontal = 8.dp, vertical = 10.dp)
+                        .clip(RoundedCornerShape(24.dp))
                 ) {
                     OceanTrayProgressBackground(
                         progress = animatedProgress,
                         modifier = Modifier.matchParentSize()
                     )
                     Column(
-                        Modifier.padding(horizontal = 4.dp, vertical = 6.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 8.dp, vertical = 10.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         Row(
                             Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.Top
                         ) {
-                            PuzzleControlIcon(
-                                icon = if (ui.running) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                label = if (ui.running) "Pause" else "Resume",
-                                contentDescription = if (ui.running) "Pause the puzzle timer" else "Resume the puzzle timer",
-                                enabled = !ui.loading && ui.image != null,
-                                onClick = { if (ui.running) vm.pause() else vm.resume() },
-                                modifier = Modifier.weight(1f),
-                                    brush = Brush.linearGradient(listOf(Color(0xFF6B7CFF), Color(0xFF8D5CFF)))
-                                )
-                            PuzzleControlIcon(
-                                icon = when {
-                                    gridShifted -> Icons.Default.Restore
-                                    canDecreaseGrid -> Icons.Default.GridView
-                                    else -> Icons.Default.CheckCircle
-                                },
-                                label = when {
-                                    gridShifted -> "Restore"
-                                    !canDecreaseGrid -> "Min Grid"
-                                    else -> "Grid"
-                                },
-                                contentDescription = when {
-                                    gridShifted -> "Restore the original puzzle grid for free"
-                                    !canDecreaseGrid -> "Minimum puzzle grid reached"
-                                    crystals > 0 -> "Spend one Crystal to reduce the grid and use fewer, larger pieces"
-                                    else -> "No Crystals remaining. Grid Shift is unavailable"
-                                },
-                                enabled = !ui.loading && ui.image != null && (gridShifted || canDecreaseGrid),
-                                onClick = {
-                                    if (!gridShifted && canDecreaseGrid && crystals <= 0) crystalInfo = true
-                                    else vm.toggleGridShift()
-                                },
-                                modifier = Modifier.weight(1f),
-                                containerColor = if (gridShifted) MaterialTheme.colorScheme.tertiaryContainer
-                                    else MaterialTheme.colorScheme.secondaryContainer,
-                                    brush = Brush.linearGradient(listOf(Color(0xFF38D9C8), Color(0xFF53B3FF)))
-                                )
-                            PuzzleControlIcon(
-                                icon = Icons.Default.Lightbulb,
-                                label = "Hint",
-                                contentDescription = if (hints > 0)
-                                    "Use one Hint to solve one random puzzle step. $hints remaining"
-                                else
-                                    "No Hints remaining. Earn a Hint by completing an Adventure within optimal moves",
-                                enabled = hints > 0 && !ui.loading && ui.image != null && (!ui.started || ui.running),
-                                badgeCount = hints,
-                                onClick = {
-                                    vm.hintStep { result ->
-                                        when (result) {
-                                            1 -> {
-                                                if (soundEnabled) feedback.playConnectionSound()
-                                                if (hapticsEnabled) feedback.buzzForConnection()
-                                            }
-                                            2 -> {
-                                                if (soundEnabled) feedback.playSolvedSound()
-                                                if (hapticsEnabled) feedback.buzzForSolved()
-                                            }
+                        PuzzleControlIcon(
+                            icon = if (ui.running) Icons.Default.Pause else Icons.Default.PlayArrow,
+                            label = if (ui.running) "Pause" else "Resume",
+                            contentDescription = if (ui.running) "Pause the puzzle timer" else "Resume the puzzle timer",
+                            enabled = !ui.loading && ui.image != null,
+                            onClick = { if (ui.running) vm.pause() else vm.resume() },
+                            modifier = Modifier.weight(1f),
+                            brush = Brush.linearGradient(listOf(Color(0xFF6A5CFF), Color(0xFF9A6BFF))),
+                            motion = ActionMotion.DEPTH_PRESS
+                        )
+                        PuzzleControlIcon(
+                            icon = when {
+                                gridShifted -> Icons.Default.Restore
+                                canDecreaseGrid -> Icons.Default.GridView
+                                else -> Icons.Default.CheckCircle
+                            },
+                            label = when {
+                                gridShifted -> "Restore"
+                                !canDecreaseGrid -> "Min Grid"
+                                else -> "Grid"
+                            },
+                            contentDescription = when {
+                                gridShifted -> "Restore the original puzzle grid for free"
+                                !canDecreaseGrid -> "Minimum puzzle grid reached"
+                                crystals > 0 -> "Spend one Crystal to reduce the grid and use fewer, larger pieces"
+                                else -> "No Crystals remaining. Grid Shift is unavailable"
+                            },
+                            enabled = !ui.loading && ui.image != null && (gridShifted || canDecreaseGrid),
+                            onClick = {
+                                if (!gridShifted && canDecreaseGrid && crystals <= 0) crystalInfo = true
+                                else vm.toggleGridShift()
+                            },
+                            modifier = Modifier.weight(1f),
+                            containerColor = if (gridShifted) MaterialTheme.colorScheme.tertiaryContainer
+                                else MaterialTheme.colorScheme.secondaryContainer,
+                            brush = Brush.linearGradient(listOf(Color(0xFF20D5C7), Color(0xFF36B8FF))),
+                            motion = ActionMotion.BOUNCE_UP
+                        )
+                        PuzzleControlIcon(
+                            icon = Icons.Default.Lightbulb,
+                            label = "Hint",
+                            contentDescription = if (hints > 0)
+                                "Use one Hint to solve one random puzzle step. $hints remaining"
+                            else
+                                "No Hints remaining. Earn a Hint by completing an Adventure within optimal moves",
+                            enabled = hints > 0 && !ui.loading && ui.image != null && (!ui.started || ui.running),
+                            badgeCount = hints,
+                            onClick = {
+                                vm.hintStep { result ->
+                                    when (result) {
+                                        1 -> {
+                                            if (soundEnabled) feedback.playConnectionSound()
+                                            if (hapticsEnabled) feedback.buzzForConnection()
+                                        }
+                                        2 -> {
+                                            if (soundEnabled) feedback.playSolvedSound()
+                                            if (hapticsEnabled) feedback.buzzForSolved()
                                         }
                                     }
-                                },
-                                modifier = Modifier.weight(1f),
-                                    brush = Brush.linearGradient(listOf(Color(0xFFFFB347), Color(0xFFFF5D8F)))
-                                )
-                            PuzzleControlIcon(
-                                icon = Icons.Default.Refresh,
-                                label = "Restart",
-                                contentDescription = "Restart this adventure",
-                                enabled = !ui.loading && ui.image != null,
-                                onClick = { confirmRestart = true },
-                                modifier = Modifier.weight(1f),
-                                    brush = Brush.linearGradient(listOf(Color(0xFFFF8A7A), Color(0xFFFFA73D)))
-                                )
-                        }
+                                }
+                            },
+                            modifier = Modifier.weight(1f),
+                            brush = Brush.linearGradient(listOf(Color(0xFFFFB739), Color(0xFFFF5F93))),
+                            motion = ActionMotion.PULSE
+                        )
+                        PuzzleControlIcon(
+                            icon = Icons.Default.Refresh,
+                            label = "Restart",
+                            contentDescription = "Restart this adventure",
+                            enabled = !ui.loading && ui.image != null,
+                            onClick = { confirmRestart = true },
+                            modifier = Modifier.weight(1f),
+                            brush = Brush.linearGradient(listOf(Color(0xFFFF795E), Color(0xFFFFA43C))),
+                            motion = ActionMotion.SHAKE
+                        )
                     }
+                }
                 }
             }
             ui.image?.attribution?.let { credit ->
@@ -511,7 +516,8 @@ fun PicturePuzzleGameScreen(
                 VibrantAction(
                     onClick = vm::retrySave,
                     modifier = Modifier.height(46.dp).fillMaxWidth(0.5f),
-                    brush = VibrantPinkBrush
+                    brush = VibrantPinkBrush,
+                    motion = ActionMotion.SHAKE
                 ) { Text("Retry save", color = Color.White, fontWeight = FontWeight.Bold) }
             }
             Spacer(Modifier.height(8.dp))
@@ -581,26 +587,40 @@ private fun ordinalSuffix(number: Int): String {
 
 @Composable
 fun CoinPill(coins: Int, onClick: () -> Unit = {}) {
-    Surface(onClick = onClick, modifier = Modifier.heightIn(min = 48.dp).semantics(mergeDescendants = true) {
-        contentDescription = "$coins gold coins. Reward details"
-    }, shape = CircleShape, color = MaterialTheme.colorScheme.tertiaryContainer) {
+    VibrantAction(
+        onClick = onClick,
+        modifier = Modifier.heightIn(min = 48.dp).semantics(mergeDescendants = true) {
+            contentDescription = "$coins gold coins. Reward details"
+        },
+        shape = CircleShape,
+        brush = Brush.linearGradient(listOf(Color(0xFFFFD65A), Color(0xFFFFA63D))),
+        contentColor = Color(0xFF5A3B00),
+        motion = ActionMotion.BOUNCE_UP
+    ) {
         Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             GoldCoinIcon()
             Spacer(Modifier.width(4.dp))
-            Text("$coins", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onTertiaryContainer)
+            Text("$coins", fontWeight = FontWeight.Bold, color = Color(0xFF5A3B00))
         }
     }
 }
 
 @Composable
 fun CrystalPill(crystals: Int, onClick: () -> Unit = {}) {
-    Surface(onClick = onClick, modifier = Modifier.heightIn(min = 48.dp).semantics(mergeDescendants = true) {
-        contentDescription = "$crystals crystals. Grid Shift power"
-    }, shape = CircleShape, color = MaterialTheme.colorScheme.secondaryContainer) {
+    VibrantAction(
+        onClick = onClick,
+        modifier = Modifier.heightIn(min = 48.dp).semantics(mergeDescendants = true) {
+            contentDescription = "$crystals crystals. Grid Shift power"
+        },
+        shape = CircleShape,
+        brush = Brush.linearGradient(listOf(Color(0xFF83E8FF), Color(0xFF50B9FF))),
+        contentColor = Color(0xFF173B61),
+        motion = ActionMotion.PULSE
+    ) {
         Row(Modifier.padding(horizontal = 11.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             CrystalIcon(20.dp)
             Spacer(Modifier.width(4.dp))
-            Text("$crystals", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSecondaryContainer)
+            Text("$crystals", fontWeight = FontWeight.Bold, color = Color(0xFF173B61))
         }
     }
 }
@@ -632,174 +652,91 @@ fun CrystalIcon(size: androidx.compose.ui.unit.Dp = 18.dp) {
 }
 
 @Composable
-private fun CompactTimeCard(
+private fun StandaloneTimer(
     elapsedMillis: Long,
     modifier: Modifier = Modifier
 ) {
-    val totalSeconds = (elapsedMillis.coerceAtLeast(0L) / 1000L)
-    val minutes = totalSeconds / 60L
-    val seconds = totalSeconds % 60L
-    val shape = RoundedCornerShape(18.dp)
-    val accent = Brush.horizontalGradient(listOf(Color(0xFF5CCBFF), Color(0xFF6D73FF)))
-
+    val shape = RoundedCornerShape(16.dp)
     Box(
         modifier = modifier
-            .height(70.dp)
+            .height(52.dp)
             .clip(shape)
-            .background(Color(0xFFE5F5FF))
-            .border(1.5.dp, accent, shape)
-            .semantics {
-                contentDescription = "$minutes minutes $seconds seconds"
-            }
+            .background(
+                Brush.horizontalGradient(
+                    listOf(Color(0xFFF6FFFE), Color(0xFFE4F8F6))
+                )
+            )
+            .border(1.2.dp, Color(0xFF83C9C8), shape)
+            .semantics { contentDescription = "Timer ${formatPlayTime(elapsedMillis)}" },
+        contentAlignment = Alignment.Center
     ) {
-        Box(
-            Modifier
-                .align(Alignment.TopCenter)
-                .fillMaxWidth(0.74f)
-                .height(4.dp)
-                .clip(CircleShape)
-                .background(accent)
-        )
-        Row(
-            Modifier
-                .fillMaxSize()
-                .padding(horizontal = 7.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
-        ) {
-            Icon(
-                Icons.Default.Schedule,
-                contentDescription = null,
-                tint = Color(0xFF3F5FC9),
-                modifier = Modifier.size(17.dp)
-            )
-            Spacer(Modifier.width(5.dp))
-            TimeUnitValue(minutes, "m")
-            Text(
-                ":",
-                color = Color(0xFF6F78A8),
-                fontWeight = FontWeight.Black,
-                fontSize = 18.sp,
-                modifier = Modifier.padding(horizontal = 2.dp)
-            )
-            TimeUnitValue(seconds, "s")
-        }
-    }
-}
-
-@Composable
-private fun TimeUnitValue(value: Long, suffix: String) {
-    Row(verticalAlignment = Alignment.Bottom) {
         Text(
-            text = value.toString().padStart(2, '0'),
-            color = Color(0xFF1F2554),
+            text = formatPlayTime(elapsedMillis),
+            color = Color(0xFF083F43),
+            fontFamily = FontFamily.Monospace,
             fontWeight = FontWeight.Black,
-            fontSize = 20.sp,
-            maxLines = 1
-        )
-        Text(
-            text = suffix,
-            color = Color(0xFF55639C),
-            fontWeight = FontWeight.ExtraBold,
-            fontSize = 10.sp,
-            modifier = Modifier.padding(start = 1.dp, bottom = 3.dp)
+            fontSize = 22.sp,
+            letterSpacing = 0.4.sp,
+            maxLines = 1,
+            softWrap = false
         )
     }
 }
 
 @Composable
-private fun CompactStatCard(
-    value: String,
-    modifier: Modifier,
-    background: Color,
-    accentBrush: Brush,
-    icon: @Composable () -> Unit,
-    valueColor: Color = Color(0xFF231A34)
+private fun ResourceNotificationAction(
+    value: Int,
+    description: String,
+    badgeColor: Color,
+    motion: ActionMotion,
+    onClick: () -> Unit,
+    icon: @Composable () -> Unit
 ) {
-    val shape = RoundedCornerShape(18.dp)
     Box(
-        modifier = modifier
-            .height(70.dp)
-            .clip(shape)
-            .background(background)
-            .border(width = 1.5.dp, brush = accentBrush, shape = shape)
+        modifier = Modifier
+            .width(60.dp)
+            .height(54.dp),
+        contentAlignment = Alignment.Center
     ) {
-        Box(
-            Modifier
-                .align(Alignment.TopCenter)
-                .fillMaxWidth(0.70f)
-                .height(4.dp)
-                .clip(CircleShape)
-                .background(accentBrush)
-        )
-        Row(
-            Modifier
-                .fillMaxSize()
-                .padding(horizontal = 8.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically
+        VibrantAction(
+            onClick = onClick,
+            modifier = Modifier
+                .size(46.dp)
+                .semantics { this.contentDescription = description },
+            shape = CircleShape,
+            brush = Brush.linearGradient(
+                listOf(Color(0x24FFFFFF), Color(0x0BFFFFFF))
+            ),
+            motion = motion
         ) {
             icon()
-            Spacer(Modifier.width(6.dp))
-            Text(
-                value,
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Black,
-                color = valueColor,
-                maxLines = 1
-            )
         }
-    }
-}
-
-@Composable
-private fun CompactResourceCard(
-    value: Int,
-    modifier: Modifier,
-    background: Color,
-    accentBrush: Brush,
-    icon: @Composable () -> Unit,
-    onClick: () -> Unit,
-    valueColor: Color = Color(0xFF231A34)
-) {
-    val shape = RoundedCornerShape(18.dp)
-    Surface(
-        onClick = onClick,
-        modifier = modifier
-            .height(70.dp)
-            .border(width = 1.5.dp, brush = accentBrush, shape = shape)
-            .semantics(mergeDescendants = true) {
-                contentDescription = value.toString()
-            },
-        shape = shape,
-        color = background,
-        tonalElevation = 0.dp,
-        shadowElevation = 2.dp
-    ) {
-        Box(Modifier.fillMaxSize()) {
+        val text = value.coerceAtMost(999999).toString()
+        Surface(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .widthIn(min = 22.dp, max = 56.dp)
+                .heightIn(min = 20.dp),
+            shape = CircleShape,
+            color = badgeColor,
+            shadowElevation = 3.dp,
+            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.85f))
+        ) {
             Box(
-                Modifier
-                    .align(Alignment.TopCenter)
-                    .fillMaxWidth(0.70f)
-                    .height(4.dp)
-                    .clip(CircleShape)
-                    .background(accentBrush)
-            )
-            Row(
-                Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 8.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
+                modifier = Modifier.padding(horizontal = if (text.length >= 5) 4.dp else 6.dp, vertical = 2.dp),
+                contentAlignment = Alignment.Center
             ) {
-                icon()
-                Spacer(Modifier.width(6.dp))
                 Text(
-                    value.toString(),
-                    style = MaterialTheme.typography.headlineSmall,
+                    text = text,
+                    color = Color(0xFF352400),
                     fontWeight = FontWeight.Black,
-                    color = valueColor,
-                    maxLines = 1
+                    fontSize = when {
+                        text.length >= 6 -> 9.sp
+                        text.length >= 4 -> 10.sp
+                        else -> 11.sp
+                    },
+                    maxLines = 1,
+                    softWrap = false
                 )
             }
         }
@@ -817,6 +754,7 @@ private fun PuzzleControlIcon(
     modifier: Modifier = Modifier,
     containerColor: Color = MaterialTheme.colorScheme.surfaceVariant,
     brush: Brush = Brush.verticalGradient(listOf(containerColor.copy(alpha = 0.96f), Color.White.copy(alpha = 0.78f))),
+    motion: ActionMotion = ActionMotion.SHRINK,
     badgeCount: Int? = null
 ) {
     Column(
@@ -828,12 +766,13 @@ private fun PuzzleControlIcon(
             onClick = onClick,
             enabled = enabled,
             modifier = Modifier
-                .size(60.dp)
+                .size(58.dp)
                 .semantics {
                     this.contentDescription = contentDescription
                 },
             shape = CircleShape,
-            brush = brush
+            brush = brush,
+            motion = motion
         ) {
             if (badgeCount != null) {
                 BadgedBox(
@@ -843,16 +782,16 @@ private fun PuzzleControlIcon(
                         }
                     }
                 ) {
-                    Icon(icon, contentDescription = null, modifier = Modifier.size(25.dp), tint = Color(0xFF2E2440))
+                    Icon(icon, contentDescription = null, modifier = Modifier.size(25.dp), tint = Color(0xFF083F43))
                 }
             } else {
-                Icon(icon, contentDescription = null, modifier = Modifier.size(25.dp), tint = Color(0xFF2E2440))
+                Icon(icon, contentDescription = null, modifier = Modifier.size(25.dp), tint = Color(0xFF083F43))
             }
         }
         Text(
             text = label,
             style = MaterialTheme.typography.labelMedium,
-            color = Color(0xFF3F3155),
+            color = Color(0xFF0B5559),
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center,
             maxLines = 1,
@@ -897,7 +836,7 @@ private fun OceanTrayProgressBackground(
     )
 
     Canvas(
-        modifier = modifier.background(Color(0xFFE6DDF6))
+        modifier = modifier.background(Color(0xFFEAF8F5))
     ) {
         if (clampedProgress <= 0.001f) return@Canvas
 
@@ -930,9 +869,9 @@ private fun OceanTrayProgressBackground(
             path = backWave,
             brush = Brush.verticalGradient(
                 colors = listOf(
-                    Color(0xFF98EFFF).copy(alpha = 0.56f),
-                    Color(0xFF5BCBFF).copy(alpha = 0.72f),
-                    Color(0xFF378BFF).copy(alpha = 0.82f)
+                    Color(0xFF9EF4EE).copy(alpha = 0.56f),
+                    Color(0xFF54D8D3).copy(alpha = 0.72f),
+                    Color(0xFF1AA3AE).copy(alpha = 0.82f)
                 ),
                 startY = waterTop,
                 endY = size.height
@@ -942,9 +881,9 @@ private fun OceanTrayProgressBackground(
             path = frontWave,
             brush = Brush.verticalGradient(
                 colors = listOf(
-                    Color(0xFF9EF3FF).copy(alpha = 0.90f),
-                    Color(0xFF54C9FF).copy(alpha = 0.95f),
-                    Color(0xFF2563FF).copy(alpha = 0.98f)
+                    Color(0xFFB1FFF4).copy(alpha = 0.90f),
+                    Color(0xFF49DAD3).copy(alpha = 0.95f),
+                    Color(0xFF0E8C98).copy(alpha = 0.98f)
                 ),
                 startY = waterTop,
                 endY = size.height
