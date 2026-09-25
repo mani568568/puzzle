@@ -20,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -74,55 +75,11 @@ fun JourneyHistoryScreen(
             .padding(horizontal = 18.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.Top
-        ) {
-            VibrantCircleAction(
-                onClick = onBack,
-                modifier = Modifier.padding(top = 8.dp).size(44.dp),
-                brush = VibrantBlueBrush,
-                motion = ActionMotion.SHRINK
-            ) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
-            }
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Text(
-                    "Adventure History",
-                    style = MaterialTheme.typography.headlineLarge,
-                    fontWeight = FontWeight.Black,
-                    lineHeight = MaterialTheme.typography.headlineLarge.lineHeight
-                )
-                Text(
-                    "Replay finished levels, revisit milestones, and compare your best runs.",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    HistoryResourceMiniButton(
-                        value = home.crystals,
-                        description = "${home.crystals} crystals",
-                        badgeColor = Color(0xFF3FCBEA),
-                        motion = ActionMotion.PULSE,
-                        icon = { CrystalIcon(24.dp) }
-                    )
-                    HistoryResourceMiniButton(
-                        value = home.coins,
-                        description = "${home.coins} gold coins",
-                        badgeColor = Color(0xFFFFB52E),
-                        motion = ActionMotion.BOUNCE_UP,
-                        icon = { GoldCoinIcon(Modifier.size(24.dp)) }
-                    )
-                }
-            }
-        }
+        HistoryHeroCard(
+            crystals = home.crystals,
+            coins = home.coins,
+            onBack = onBack
+        )
 
         JourneySummaryCard(
             completed = home.completed.size,
@@ -138,8 +95,11 @@ fun JourneyHistoryScreen(
             wallet = home.coins
         )
 
-        Text("Past Adventures", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        SectionHeader(
+            title = "Past Adventures",
+            subtitle = "Tap a card"
+        )
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             JournalFilterButton("All", filter == JournalFilter.ALL, Modifier.weight(1f)) {
                 filterName = JournalFilter.ALL.name
             }
@@ -166,7 +126,7 @@ fun JourneyHistoryScreen(
                         ready = ready,
                         unlocked = unlocked,
                         expanded = expandedAdventure == level.id,
-                                                onToggle = {
+                        onToggle = {
                             expandedAdventure = if (expandedAdventure == level.id) null else level.id
                         },
                         onOpenAdventure = { onOpenAdventure(level.id) },
@@ -193,6 +153,112 @@ fun JourneyHistoryScreen(
 }
 
 @Composable
+private fun HistoryHeroCard(
+    crystals: Int,
+    coins: Int,
+    onBack: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(10.dp, RoundedCornerShape(30.dp), clip = false),
+        shape = RoundedCornerShape(30.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.8f))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    Brush.linearGradient(
+                        listOf(Color(0xFFF7FCFF), Color(0xFFF1F7FF), Color(0xFFFAF1FF))
+                    )
+                )
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
+            ) {
+                VibrantCircleAction(
+                    onClick = onBack,
+                    modifier = Modifier.size(48.dp),
+                    brush = VibrantBlueBrush,
+                    motion = ActionMotion.SHRINK
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
+                }
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    HistoryResourceMiniButton(
+                        value = crystals,
+                        description = "$crystals crystals",
+                        badgeColor = Color(0xFF47D1F4),
+                        motion = ActionMotion.PULSE,
+                        icon = { CrystalIcon(24.dp) }
+                    )
+                    HistoryResourceMiniButton(
+                        value = coins,
+                        description = "$coins gold coins",
+                        badgeColor = Color(0xFFFFC443),
+                        motion = ActionMotion.BOUNCE_UP,
+                        icon = { GoldCoinIcon(Modifier.size(24.dp)) }
+                    )
+                }
+            }
+
+            Text(
+                "Adventure History",
+                style = MaterialTheme.typography.headlineLarge,
+                fontWeight = FontWeight.Black,
+                color = Color(0xFF223458),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                lineHeight = MaterialTheme.typography.displaySmall.lineHeight
+            )
+
+            HeroPill(text = "Your journey")
+        }
+    }
+}
+
+@Composable
+private fun HeroPill(text: String) {
+    Surface(
+        shape = CircleShape,
+        color = Color.White.copy(alpha = 0.92f),
+        border = BorderStroke(1.dp, Color(0xFFF0F4FF))
+    ) {
+        Text(
+            text,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Bold,
+            color = Color(0xFF496078)
+        )
+    }
+}
+
+@Composable
+private fun SectionHeader(title: String, subtitle: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(
+            title,
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Black,
+            color = Color(0xFF2B3554)
+        )
+        if (subtitle.isNotBlank()) {
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = Color(0xFF6B7791))
+        }
+    }
+}
+
+@Composable
 private fun HistoryResourceMiniButton(
     value: Int,
     description: String,
@@ -200,33 +266,33 @@ private fun HistoryResourceMiniButton(
     motion: ActionMotion,
     icon: @Composable () -> Unit
 ) {
+    val text = value.coerceAtMost(999999).toString()
     Box(
         modifier = Modifier
-            .width(64.dp)
-            .height(56.dp),
+            .width(54.dp)
+            .height(54.dp),
         contentAlignment = Alignment.Center
     ) {
         VibrantAction(
             onClick = {},
             modifier = Modifier
-                .size(44.dp)
+                 .size(42.dp)
                 .semantics { contentDescription = description },
             shape = CircleShape,
-            brush = Brush.linearGradient(listOf(Color(0x24FFFFFF), Color(0x0EFFFFFF))),
+            brush = Brush.linearGradient(listOf(Color(0xFFFFFFFF), Color(0xFFF1F3FF))),
             motion = motion
         ) {
             icon()
         }
-        val text = value.coerceAtMost(999999).toString()
         Surface(
             modifier = Modifier
                 .align(Alignment.TopEnd)
-                .widthIn(min = 22.dp, max = 56.dp)
+                .widthIn(min = 22.dp, max = 54.dp)
                 .heightIn(min = 20.dp),
             shape = CircleShape,
             color = badgeColor,
             shadowElevation = 3.dp,
-            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.85f))
+            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.90f))
         ) {
             Box(
                 modifier = Modifier.padding(horizontal = if (text.length >= 5) 4.dp else 6.dp, vertical = 2.dp),
@@ -234,12 +300,12 @@ private fun HistoryResourceMiniButton(
             ) {
                 Text(
                     text = text,
-                    color = Color(0xFF352400),
+                    color = Color(0xFF27303B),
                     fontWeight = FontWeight.Black,
                     fontSize = when {
-                        text.length >= 6 -> 9.sp
-                        text.length >= 4 -> 10.sp
-                        else -> 11.sp
+                        text.length >= 6 -> 8.sp
+                        text.length >= 4 -> 9.sp
+                        else -> 10.sp
                     },
                     maxLines = 1,
                     softWrap = false
@@ -258,64 +324,150 @@ private fun JourneySummaryCard(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(26.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFDDF6FF))
+        shape = RoundedCornerShape(30.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.82f))
     ) {
-        Column(Modifier.padding(horizontal = 20.dp, vertical = 22.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically) {
-                Column {
-                    Text("Progress Overview", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black)
-                    Text("$completed of $maxAdventure Adventures completed",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    Brush.linearGradient(listOf(Color(0xFFDFF4FF), Color(0xFFF2EEFF), Color(0xFFFFF7E9)))
+                )
+                .padding(horizontal = 14.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        "Progress",
+                        style = MaterialTheme.typography.headlineLarge,
+                        fontWeight = FontWeight.Black,
+                        color = Color(0xFF223458)
+                    )
+                    Text(
+                        "${completed} / ${maxAdventure}",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = Color(0xFF647189)
+                    )
                 }
-                Surface(shape = CircleShape, color = MaterialTheme.colorScheme.tertiaryContainer) {
-                    Text("${(progress * 100).toInt()}%", modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                        fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onTertiaryContainer)
+                Surface(
+                    shape = RoundedCornerShape(18.dp),
+                    color = Color.White.copy(alpha = 0.95f),
+                    border = BorderStroke(1.dp, Color(0xFFE6EDFA))
+                ) {
+                    Text(
+                        text = "${(progress * 100).toInt()}%",
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                        color = Color(0xFF345187),
+                        fontWeight = FontWeight.Black,
+                        style = MaterialTheme.typography.titleLarge
+                    )
                 }
             }
             Box(
-                Modifier.fillMaxWidth().height(10.dp).clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.72f))
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(16.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(Color.White.copy(alpha = 0.66f))
             ) {
                 Box(
-                    Modifier.fillMaxWidth(progress).fillMaxHeight().clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary)
+                    modifier = Modifier
+                        .fillMaxWidth(progress.coerceAtLeast(0.06f))
+                        .fillMaxHeight()
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(
+                            Brush.horizontalGradient(
+                                listOf(Color(0xFF60D8FF), Color(0xFF6E82FF), Color(0xFFFF92BE))
+                            )
+                        )
                 )
             }
-            Text("$milestones Milestones reached",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                SummaryBadge("✓", completed.toString(), Modifier.weight(1f), Color(0xFFEAF8FF), Color(0xFF2F6C8E))
+                SummaryBadge("★", milestones.toString(), Modifier.weight(1f), Color(0xFFFFF4D9), Color(0xFF8D6A1E))
+                SummaryBadge("↗", (maxAdventure - completed).coerceAtLeast(0).toString(), Modifier.weight(1f), Color(0xFFFFE5F0), Color(0xFFA34774))
+            }
+        }
+    }
+}
+
+@Composable
+private fun SummaryBadge(
+    label: String,
+    value: String,
+    modifier: Modifier,
+    color: Color,
+    valueColor: Color
+) {
+    Card(
+        modifier = modifier.height(74.dp),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = color),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.8f))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 8.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.Start
+        ) {
+            Text(
+                label,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = valueColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                value,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Black,
+                color = valueColor
+            )
         }
     }
 }
 
 @Composable
 private fun StatsGrid(moves: Int, playTime: Long, fastestTime: Long, wallet: Int) {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            StatTile("TOTAL MOVES", if (moves > 0) moves.toString() else "—", Modifier.weight(1f))
-            StatTile("PLAY TIME", if (playTime > 0) formatJournalDuration(playTime) else "—", Modifier.weight(1f))
-        }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            StatTile("FASTEST", if (fastestTime > 0) formatJournalDuration(fastestTime) else "—", Modifier.weight(1f))
-            StatTile("GOLD COINS", wallet.toString(), Modifier.weight(1f))
+            StatTile("TOTAL MOVES", if (moves > 0) moves.toString() else "—", Modifier.weight(1f), Color(0xFFFFF7E2), Color(0xFF91681B))
+            StatTile("PLAY TIME", if (playTime > 0) formatJournalDuration(playTime) else "—", Modifier.weight(1f), Color(0xFFE9F7FF), Color(0xFF2F688B))
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            StatTile("FASTEST", if (fastestTime > 0) formatJournalDuration(fastestTime) else "—", Modifier.weight(1f), Color(0xFFEAF8EA), Color(0xFF33794B))
+            StatTile("GOLD COINS", wallet.toString(), Modifier.weight(1f), Color(0xFFFFEAF5), Color(0xFF99446F))
         }
     }
 }
 
 @Composable
-private fun StatTile(label: String, value: String, modifier: Modifier = Modifier) {
+private fun StatTile(label: String, value: String, modifier: Modifier = Modifier, background: Color, valueColor: Color) {
     Card(
         modifier = modifier,
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFFBF1))
+        colors = CardDefaults.cardColors(containerColor = background),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.85f))
     ) {
-        Column(Modifier.padding(horizontal = 16.dp, vertical = 18.dp)) {
-            Text(label, style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
-            Spacer(Modifier.height(4.dp))
-            Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Column(
+            Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(label, style = MaterialTheme.typography.labelLarge, color = valueColor.copy(alpha = 0.85f), fontWeight = FontWeight.Black)
+            Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black, color = valueColor)
         }
     }
 }
@@ -324,7 +476,7 @@ private fun StatTile(label: String, value: String, modifier: Modifier = Modifier
 private fun JournalFilterButton(label: String, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
     VibrantAction(
         onClick = onClick,
-        modifier = modifier.heightIn(min = 52.dp),
+        modifier = modifier.heightIn(min = 46.dp),
         shape = CircleShape,
         brush = if (selected) VibrantBlueBrush else Brush.linearGradient(
             listOf(Color(0xFFFFD7E5), Color(0xFFFFE7B8), Color(0xFFDDF7F0))
@@ -363,7 +515,7 @@ private fun AdventureJournalCard(
     ) {
         Column {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 14.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Box {
@@ -371,7 +523,7 @@ private fun AdventureJournalCard(
                         painter = painterResource(ImageAssets.getLevelImage(level.id)),
                         contentDescription = "Adventure ${level.id} artwork",
                         modifier = Modifier
-                            .size(86.dp)
+                            .size(72.dp)
                             .clip(RoundedCornerShape(18.dp))
                             .then(if (!unlocked) Modifier.blur(18.dp) else Modifier),
                         contentScale = ContentScale.Crop,
@@ -388,16 +540,16 @@ private fun AdventureJournalCard(
                         }
                     }
                 }
-                Column(Modifier.weight(1f).padding(horizontal = 14.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text("ADVENTURE ${level.id}", style = MaterialTheme.typography.labelSmall,
+                Column(Modifier.weight(1f).padding(horizontal = 10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("A${level.id}", style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                     Text(level.title, style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text(
                         when {
-                            inProgress -> "In progress · tap for details"
-                            completed -> "Finished · tap for stats"
-                            ready -> "Ready for you"
+                            inProgress -> "In progress"
+                            completed -> "Finished"
+                            ready -> "Ready"
                             else -> "Locked"
                         },
                         style = MaterialTheme.typography.bodySmall,
@@ -412,8 +564,8 @@ private fun AdventureJournalCard(
                     onClick = onReplayAdventure,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(start = 12.dp, end = 12.dp, bottom = 12.dp)
-                        .height(52.dp),
+                        .padding(start = 12.dp, end = 12.dp, bottom = 10.dp)
+                        .height(48.dp),
                     shape = CircleShape,
                     brush = VibrantPinkBrush,
                     motion = ActionMotion.BOUNCE_UP
@@ -428,7 +580,7 @@ private fun AdventureJournalCard(
 
             if (expanded) {
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
-                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     if (history != null && (history.bestMoves > 0 || history.bestElapsedMillis > 0 || history.bestReward > 0)) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             MiniStat("Best time", valueOrDash(history.bestElapsedMillis) { formatJournalDuration(it) }, Modifier.weight(1f))
@@ -453,7 +605,7 @@ private fun AdventureJournalCard(
                     when {
                         inProgress -> VibrantAction(
                             onClick = onOpenAdventure,
-                            modifier = Modifier.fillMaxWidth().height(52.dp),
+                            modifier = Modifier.fillMaxWidth().height(48.dp),
                             shape = CircleShape,
                             brush = VibrantBlueBrush,
                             motion = ActionMotion.BOUNCE_UP
@@ -466,7 +618,7 @@ private fun AdventureJournalCard(
                         }
                         ready -> VibrantAction(
                             onClick = onOpenAdventure,
-                            modifier = Modifier.fillMaxWidth().height(52.dp),
+                            modifier = Modifier.fillMaxWidth().height(48.dp),
                             shape = CircleShape,
                             brush = VibrantMintBrush,
                             motion = ActionMotion.BOUNCE_UP
@@ -493,23 +645,36 @@ private fun StatusDot(completed: Boolean, inProgress: Boolean, ready: Boolean) {
         ready -> "READY"
         else -> "LOCKED"
     }
-    val color = when {
-        inProgress -> MaterialTheme.colorScheme.secondaryContainer
-        completed -> MaterialTheme.colorScheme.primaryContainer
-        ready -> MaterialTheme.colorScheme.tertiaryContainer
-        else -> MaterialTheme.colorScheme.surface
+    val brush = when {
+        inProgress -> Brush.linearGradient(listOf(Color(0xFF73D8FF), Color(0xFF3B9DFF)))
+        completed -> Brush.linearGradient(listOf(Color(0xFFFFC3D8), Color(0xFFFF8FB0)))
+        ready -> Brush.linearGradient(listOf(Color(0xFFFFE38C), Color(0xFFFFB74D)))
+        else -> Brush.linearGradient(listOf(Color(0xFFE5E7EC), Color(0xFFB0B7C4)))
     }
-    Surface(shape = CircleShape, color = color) {
-        Text(text, modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
-            style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+    Surface(shape = CircleShape, color = Color.Transparent) {
+        Box(
+            Modifier
+                .clip(CircleShape)
+                .background(brush)
+        ) {
+            Text(
+                text,
+                modifier = Modifier.padding(horizontal = 11.dp, vertical = 7.dp),
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Black,
+                color = if (inProgress || completed) Color.White else Color(0xFF4A505C)
+            )
+        }
     }
 }
 
 @Composable
 private fun MiniStat(label: String, value: String, modifier: Modifier = Modifier) {
-    Column(modifier = modifier) {
-        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+    Card(modifier = modifier, shape = RoundedCornerShape(14.dp), colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.42f))) {
+        Column(Modifier.padding(horizontal = 8.dp, vertical = 6.dp)) {
+            Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(value, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Black, color = Color(0xFF32405E))
+        }
     }
 }
 
@@ -518,42 +683,49 @@ private fun MilestoneJournalCard(number: Int, reached: Boolean) {
     val endAdventure = number * JOURNAL_ADVENTURES_PER_MILESTONE
     val startAdventure = endAdventure - JOURNAL_ADVENTURES_PER_MILESTONE + 1
     Card(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
-        shape = RoundedCornerShape(22.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+        shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (reached) MaterialTheme.colorScheme.tertiaryContainer
-            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f)
-        )
+            containerColor = if (reached) Color(0xFFFFF0BF) else Color(0xFFF4F0FB)
+        ),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.8f))
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Surface(
                 shape = CircleShape,
                 color = if (reached) MaterialTheme.colorScheme.surface.copy(alpha = 0.76f)
                 else MaterialTheme.colorScheme.surfaceVariant
             ) {
-                Icon(Icons.Default.Star, contentDescription = null,
-                    modifier = Modifier.padding(10.dp).size(22.dp),
-                    tint = if (reached) MaterialTheme.colorScheme.onTertiaryContainer
-                    else MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            Column(Modifier.weight(1f).padding(horizontal = 14.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text("${milestoneOrdinal(number)} Milestone",
-                    style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Text(
-                    if (reached) "Reached after Adventure $endAdventure"
-                    else "Complete Adventures $startAdventure–$endAdventure to reach this checkpoint",
+                    text = if (reached) "★" else "☆",
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                    fontWeight = FontWeight.Black,
+                    color = if (reached) Color(0xFF8D6A1E) else Color(0xFF70778A)
+                )
+            }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    text = "M$number",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Black,
+                    color = Color(0xFF37435B)
+                )
+                Text(
+                    text = "$startAdventure-$endAdventure",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            Text(if (reached) "REACHED" else "AHEAD",
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold,
-                color = if (reached) MaterialTheme.colorScheme.onTertiaryContainer
-                else MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                text = if (reached) "✓" else "…",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Black,
+                color = if (reached) Color(0xFF4B8B4F) else Color(0xFF7C8599)
+            )
         }
     }
 }
