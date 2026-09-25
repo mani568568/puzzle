@@ -1,6 +1,7 @@
 package com.hb.puzz.ui
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -22,11 +23,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.hb.puzz.data.AdventureHistoryEntry
 import com.hb.puzz.data.HomeSnapshot
 import com.hb.puzz.domain.PuzzleLevel
@@ -99,11 +103,23 @@ fun JourneyHistoryScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    CrystalPill(home.crystals)
-                    CoinPill(home.coins)
+                    HistoryResourceMiniButton(
+                        value = home.crystals,
+                        description = "${home.crystals} crystals",
+                        badgeColor = Color(0xFF3FCBEA),
+                        motion = ActionMotion.PULSE,
+                        icon = { CrystalIcon(24.dp) }
+                    )
+                    HistoryResourceMiniButton(
+                        value = home.coins,
+                        description = "${home.coins} gold coins",
+                        badgeColor = Color(0xFFFFB52E),
+                        motion = ActionMotion.BOUNCE_UP,
+                        icon = { GoldCoinIcon(Modifier.size(24.dp)) }
+                    )
                 }
             }
         }
@@ -173,6 +189,63 @@ fun JourneyHistoryScreen(
         }
 
         Spacer(Modifier.height(12.dp))
+    }
+}
+
+@Composable
+private fun HistoryResourceMiniButton(
+    value: Int,
+    description: String,
+    badgeColor: Color,
+    motion: ActionMotion,
+    icon: @Composable () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .width(64.dp)
+            .height(56.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        VibrantAction(
+            onClick = {},
+            modifier = Modifier
+                .size(44.dp)
+                .semantics { contentDescription = description },
+            shape = CircleShape,
+            brush = Brush.linearGradient(listOf(Color(0x24FFFFFF), Color(0x0EFFFFFF))),
+            motion = motion
+        ) {
+            icon()
+        }
+        val text = value.coerceAtMost(999999).toString()
+        Surface(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .widthIn(min = 22.dp, max = 56.dp)
+                .heightIn(min = 20.dp),
+            shape = CircleShape,
+            color = badgeColor,
+            shadowElevation = 3.dp,
+            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.85f))
+        ) {
+            Box(
+                modifier = Modifier.padding(horizontal = if (text.length >= 5) 4.dp else 6.dp, vertical = 2.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = text,
+                    color = Color(0xFF352400),
+                    fontWeight = FontWeight.Black,
+                    fontSize = when {
+                        text.length >= 6 -> 9.sp
+                        text.length >= 4 -> 10.sp
+                        else -> 11.sp
+                    },
+                    maxLines = 1,
+                    softWrap = false
+                )
+            }
+        }
     }
 }
 

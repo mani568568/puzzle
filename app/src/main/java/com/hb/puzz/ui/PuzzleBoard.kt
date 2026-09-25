@@ -305,6 +305,10 @@ fun PuzzleBoard(
                     val baseY = minRow * tileHeightPx
                     val groupWidth = tileWidth * widthCells
                     val groupHeight = tileHeight * heightCells
+                    val celebrationPad = 10.dp
+                    val celebrationPadPx = with(density) { celebrationPad.toPx() }
+                    val canvasWidth = groupWidth + celebrationPad * 2
+                    val canvasHeight = groupHeight + celebrationPad * 2
                     val isDragging = group.any { it in draggingGroupIds }
                     val isCelebrating = group.any { it in celebratingTileIds }
                     val mergeProgress = remember(groupKey) { Animatable(1f) }
@@ -322,8 +326,8 @@ fun PuzzleBoard(
                         mergeContours(groupPositions.toSet(), gridColumns, gridRows).map { corners ->
                             Path().apply {
                                 corners.forEachIndexed { index, corner ->
-                                    val x = (corner.x - minCol) * tileWidthPx
-                                    val y = (corner.y - minRow) * tileHeightPx
+                                    val x = (corner.x - minCol) * tileWidthPx + celebrationPadPx
+                                    val y = (corner.y - minRow) * tileHeightPx + celebrationPadPx
                                     if (index == 0) moveTo(x, y) else lineTo(x, y)
                                 }
                                 close()
@@ -356,11 +360,11 @@ fun PuzzleBoard(
 
                     Canvas(
                         modifier = Modifier
-                            .size(groupWidth, groupHeight)
+                            .size(canvasWidth, canvasHeight)
                             .offset {
                                 IntOffset(
-                                    (animatedX + visualDrag.x).roundToInt(),
-                                    (animatedY + visualDrag.y).roundToInt()
+                                    (animatedX + visualDrag.x - celebrationPadPx).roundToInt(),
+                                    (animatedY + visualDrag.y - celebrationPadPx).roundToInt()
                                 )
                             }
                             .zIndex(if (isDragging) 30f else if (mergeProgress.value < 1f) 16f else 5f)
@@ -375,15 +379,17 @@ fun PuzzleBoard(
                                 clip = false
                             }
                     ) {
+                        val drawWidth = size.width - celebrationPadPx * 2f
+                        val drawHeight = size.height - celebrationPadPx * 2f
                         val occupiedPositions = group.map { positions.indexOf(it) }.toSet()
                         val mask = Path()
                         occupiedPositions.forEach { boardPosition ->
                             val localRow = boardPosition / gridColumns - minRow
                             val localCol = boardPosition % gridColumns - minCol
-                            val left = localCol * (size.width / widthCells)
-                            val top = localRow * (size.height / heightCells)
-                            val right = (localCol + 1) * (size.width / widthCells)
-                            val bottom = (localRow + 1) * (size.height / heightCells)
+                            val left = celebrationPadPx + localCol * (drawWidth / widthCells)
+                            val top = celebrationPadPx + localRow * (drawHeight / heightCells)
+                            val right = celebrationPadPx + (localCol + 1) * (drawWidth / widthCells)
+                            val bottom = celebrationPadPx + (localRow + 1) * (drawHeight / heightCells)
                             mask.addRect(Rect(left, top, right, bottom))
                         }
 
@@ -414,8 +420,8 @@ fun PuzzleBoard(
                                 image = image,
                                 srcOffset = IntOffset(srcLeft, srcTop),
                                 srcSize = IntSize(srcRight - srcLeft, srcBottom - srcTop),
-                                dstOffset = IntOffset.Zero,
-                                dstSize = IntSize(size.width.roundToInt(), size.height.roundToInt()),
+                                dstOffset = IntOffset(celebrationPadPx.roundToInt(), celebrationPadPx.roundToInt()),
+                                dstSize = IntSize(drawWidth.roundToInt(), drawHeight.roundToInt()),
                                 filterQuality = FilterQuality.High
                             )
                         }
@@ -509,7 +515,7 @@ fun PuzzleBoard(
                                             val outwardY = dy / length
                                             val tangentX = -outwardY
                                             val tangentY = outwardX
-                                            val travel = (4.dp.toPx() + h1 * 20.dp.toPx()) *
+                                            val travel = (6.dp.toPx() + h1 * 24.dp.toPx()) *
                                                 smoothFraction(local)
                                             val sideDrift = (h2 - 0.5f) * 12.dp.toPx() * local
                                             val px = edgePoint.x + outwardX * travel + tangentX * sideDrift

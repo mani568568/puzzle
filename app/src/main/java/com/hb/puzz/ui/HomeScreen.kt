@@ -1,6 +1,7 @@
 package com.hb.puzz.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -10,10 +11,12 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -113,19 +116,35 @@ fun HomeScreen(
 
             Spacer(Modifier.height(72.dp))
 
-            CurrentLevelButtonCard(
-                currentChapter = currentChapter,
-                onClick = primaryAction
-            )
-
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center,
+                horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                CrystalPill(crystalBalance, onClick = onHowToPlay)
-                Spacer(Modifier.width(10.dp))
-                CoinPill(coinBalance, onClick = onHowToPlay)
+                CurrentLevelButtonCard(
+                    currentChapter = currentChapter,
+                    onClick = primaryAction,
+                    modifier = Modifier.weight(1f)
+                )
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    HomeResourceMiniButton(
+                        value = crystalBalance,
+                        badgeColor = Color(0xFF3FCBEA),
+                        motion = ActionMotion.PULSE,
+                        onClick = onHowToPlay,
+                        icon = { CrystalIcon(24.dp) }
+                    )
+                    HomeResourceMiniButton(
+                        value = coinBalance,
+                        badgeColor = Color(0xFFFFB52E),
+                        motion = ActionMotion.BOUNCE_UP,
+                        onClick = onHowToPlay,
+                        icon = { GoldCoinIcon(Modifier.size(24.dp)) }
+                    )
+                }
             }
 
         }
@@ -215,12 +234,12 @@ private fun PlayInBlockBrand(modifier: Modifier = Modifier) {
 @Composable
 private fun CurrentLevelButtonCard(
     currentChapter: Int,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     VibrantAction(
         onClick = onClick,
-        modifier = Modifier
-            .fillMaxWidth()
+        modifier = modifier
             .height(84.dp),
         shape = RoundedCornerShape(28.dp),
         brush = VibrantOrangeBrush,
@@ -246,6 +265,63 @@ private fun CurrentLevelButtonCard(
                 tint = Color.White,
                 modifier = Modifier.size(30.dp)
             )
+        }
+    }
+}
+
+@Composable
+private fun HomeResourceMiniButton(
+    value: Int,
+    badgeColor: Color,
+    motion: ActionMotion,
+    onClick: () -> Unit,
+    icon: @Composable () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .widthIn(min = 54.dp)
+            .heightIn(min = 48.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        VibrantAction(
+            onClick = onClick,
+            modifier = Modifier.size(40.dp),
+            shape = CircleShape,
+            brush = Brush.linearGradient(
+                listOf(Color(0x28FFFFFF), Color(0x10FFFFFF))
+            ),
+            motion = motion
+        ) {
+            icon()
+        }
+        val text = value.coerceAtMost(999999).toString()
+        Surface(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .widthIn(min = 20.dp, max = 52.dp)
+                .heightIn(min = 18.dp),
+            shape = CircleShape,
+            color = badgeColor,
+            shadowElevation = 2.dp,
+            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.88f))
+        ) {
+            Box(
+                modifier = Modifier.padding(horizontal = if (text.length >= 5) 4.dp else 6.dp, vertical = 1.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = text,
+                    color = Color(0xFF352400),
+                    fontWeight = FontWeight.Black,
+                    fontSize = when {
+                        text.length >= 6 -> 8.sp
+                        text.length >= 4 -> 9.sp
+                        else -> 10.sp
+                    },
+                    maxLines = 1,
+                    softWrap = false
+                )
+            }
         }
     }
 }

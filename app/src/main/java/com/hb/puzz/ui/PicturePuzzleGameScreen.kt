@@ -210,7 +210,7 @@ fun PicturePuzzleGameScreen(
             // Match the board footprint to that logical geometry so cells remain balanced and
             // the puzzle uses substantially more vertical screen space down toward the controls.
             val puzzleAspectRatio = (vm.engine.gridColumns.toFloat() / vm.engine.gridRows.toFloat())
-                .coerceIn(0.58f, 0.68f)
+                .coerceIn(0.54f, 0.64f)
             // Keep the live puzzle framed while playing, but remove that outer board frame
             // completely during the magical finished transformation so no extra oval/outline
             // remains behind the final finished card.
@@ -288,7 +288,7 @@ fun PicturePuzzleGameScreen(
                 )
             } else {
                 Surface(
-                    Modifier.fillMaxWidth(),
+                    Modifier.fillMaxWidth(0.935f),
                     shape = puzzleFrameShape,
                     color = puzzleFrameColor,
                     border = BorderStroke(2.dp, Color(0xFF111111)),
@@ -586,41 +586,83 @@ private fun ordinalSuffix(number: Int): String {
 }
 
 @Composable
-fun CoinPill(coins: Int, onClick: () -> Unit = {}) {
+fun CoinPill(
+    coins: Int,
+    onClick: () -> Unit = {},
+    compact: Boolean = false,
+    modifier: Modifier = Modifier
+) {
+    val minHeight = if (compact) 40.dp else 52.dp
+    val horizontal = if (compact) 10.dp else 16.dp
+    val vertical = if (compact) 8.dp else 12.dp
+    val iconSize = if (compact) 16.dp else 18.dp
+    val textSize = if (compact) 15.sp else 18.sp
     VibrantAction(
         onClick = onClick,
-        modifier = Modifier.heightIn(min = 48.dp).semantics(mergeDescendants = true) {
-            contentDescription = "$coins gold coins. Reward details"
-        },
-        shape = CircleShape,
-        brush = Brush.linearGradient(listOf(Color(0xFFFFD65A), Color(0xFFFFA63D))),
+        modifier = modifier
+            .heightIn(min = minHeight)
+            .semantics(mergeDescendants = true) {
+                contentDescription = "$coins gold coins. Reward details"
+            },
+        shape = RoundedCornerShape(if (compact) 18.dp else 22.dp),
+        brush = Brush.linearGradient(listOf(Color(0xFFFFE07A), Color(0xFFFFB347))),
         contentColor = Color(0xFF5A3B00),
-        motion = ActionMotion.BOUNCE_UP
+        motion = ActionMotion.SHRINK
     ) {
-        Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-            GoldCoinIcon()
-            Spacer(Modifier.width(4.dp))
-            Text("$coins", fontWeight = FontWeight.Bold, color = Color(0xFF5A3B00))
+        Row(
+            Modifier.padding(horizontal = horizontal, vertical = vertical),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            GoldCoinIcon(Modifier.size(iconSize))
+            Spacer(Modifier.width(if (compact) 4.dp else 6.dp))
+            Text(
+                "$coins",
+                fontWeight = FontWeight.ExtraBold,
+                fontSize = textSize,
+                color = Color(0xFF5A3B00)
+            )
         }
     }
 }
 
 @Composable
-fun CrystalPill(crystals: Int, onClick: () -> Unit = {}) {
+fun CrystalPill(
+    crystals: Int,
+    onClick: () -> Unit = {},
+    compact: Boolean = false,
+    modifier: Modifier = Modifier
+) {
+    val minHeight = if (compact) 40.dp else 48.dp
+    val horizontal = if (compact) 10.dp else 11.dp
+    val vertical = if (compact) 8.dp else 10.dp
+    val iconSize = if (compact) 17.dp else 20.dp
+    val textSize = if (compact) 15.sp else 16.sp
     VibrantAction(
         onClick = onClick,
-        modifier = Modifier.heightIn(min = 48.dp).semantics(mergeDescendants = true) {
-            contentDescription = "$crystals crystals. Grid Shift power"
-        },
-        shape = CircleShape,
+        modifier = modifier
+            .heightIn(min = minHeight)
+            .semantics(mergeDescendants = true) {
+                contentDescription = "$crystals crystals. Grid Shift power"
+            },
+        shape = RoundedCornerShape(if (compact) 18.dp else 22.dp),
         brush = Brush.linearGradient(listOf(Color(0xFF83E8FF), Color(0xFF50B9FF))),
         contentColor = Color(0xFF173B61),
         motion = ActionMotion.PULSE
     ) {
-        Row(Modifier.padding(horizontal = 11.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-            CrystalIcon(20.dp)
-            Spacer(Modifier.width(4.dp))
-            Text("$crystals", fontWeight = FontWeight.Bold, color = Color(0xFF173B61))
+        Row(
+            Modifier.padding(horizontal = horizontal, vertical = vertical),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            CrystalIcon(iconSize)
+            Spacer(Modifier.width(if (compact) 4.dp else 5.dp))
+            Text(
+                "$crystals",
+                fontWeight = FontWeight.ExtraBold,
+                fontSize = textSize,
+                color = Color(0xFF173B61)
+            )
         }
     }
 }
