@@ -46,15 +46,27 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import com.hb.puzz.data.BlockMotionSpeed
 import com.hb.puzz.data.images.ImageSourceMode
 
@@ -92,138 +104,371 @@ fun HomeScreen(
             .fillMaxSize()
             .background(
                 Brush.verticalGradient(
-                    listOf(Color(0xFFFFF1D6), Color(0xFFFFE6F0), Color(0xFFE7F7FF), Color(0xFFF4F0FF))
+                    listOf(
+                        Color(0xFFDBEEF8),
+                        Color(0xFFEAF8FF),
+                        Color(0xFFF4EFE7),
+                        Color(0xFFE0F1EA)
+                    )
                 )
             )
             .safeDrawingPadding()
     ) {
+        HomeBackgroundLandscapePuzzle()
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 18.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(18.dp)
+                .padding(horizontal = 22.dp, vertical = 18.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(Modifier.height(26.dp))
-            Box(modifier = Modifier.fillMaxWidth()) {
-                PlayInBlockBrand(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 10.dp)
-                )
-            }
-
-            Spacer(Modifier.height(72.dp))
-
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                CurrentLevelButtonCard(
-                    currentChapter = currentChapter,
-                    onClick = primaryAction,
-                    modifier = Modifier.weight(1f)
+                SoftChromeIconButton(
+                    icon = Icons.Default.Settings,
+                    contentDescription = "Settings",
+                    onClick = onSettings
                 )
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    HomeResourceMiniButton(
-                        value = crystalBalance,
-                        badgeColor = Color(0xFF3FCBEA),
-                        motion = ActionMotion.PULSE,
-                        onClick = onHowToPlay,
-                        icon = { CrystalIcon(24.dp) }
-                    )
-                    HomeResourceMiniButton(
+                    TopResourcePill(
+                        icon = { GoldCoinIcon(Modifier.size(22.dp)) },
                         value = coinBalance,
-                        badgeColor = Color(0xFFFFB52E),
-                        motion = ActionMotion.BOUNCE_UP,
+                        tintColor = Color(0xFF7A5200),
+                        background = Brush.horizontalGradient(listOf(Color(0xFFFFF2B0), Color(0xFFFFD76A))),
                         onClick = onHowToPlay,
-                        icon = { GoldCoinIcon(Modifier.size(24.dp)) }
+                        motion = ActionMotion.BOUNCE_UP
+                    )
+                    TopResourcePill(
+                        icon = { CrystalIcon(20.dp) },
+                        value = crystalBalance,
+                        tintColor = Color(0xFF1E4666),
+                        background = Brush.horizontalGradient(listOf(Color(0xFFD8F7FF), Color(0xFF9FE4FF))),
+                        onClick = onHowToPlay,
+                        motion = ActionMotion.PULSE
                     )
                 }
             }
 
+            Spacer(Modifier.weight(0.75f))
+
+            SnapFrameLogo()
+            Spacer(Modifier.height(18.dp))
+
+            PremiumPlayLevelCallToAction(
+                label = "PLAY",
+                currentChapter = currentChapter,
+                title = currentChapterTitle,
+                onClick = primaryAction
+            )
+
+            Spacer(Modifier.weight(1f))
         }
 
-        VibrantCircleAction(
-            onClick = onSettings,
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(top = 2.dp, end = 18.dp)
-                .size(48.dp),
-            brush = VibrantPinkBrush,
-            motion = ActionMotion.TILT
-        ) {
-            Icon(Icons.Default.Settings, contentDescription = "Settings", tint = Color.White)
-        }
-
-        VibrantAction(
+        HistoryFloatingButton(
             onClick = onJourneyHistory,
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(20.dp)
-                .size(58.dp),
-            shape = RoundedCornerShape(20.dp),
-            brush = VibrantBlueBrush,
-            motion = ActionMotion.BOUNCE_UP
+                .padding(end = 22.dp, bottom = 20.dp)
+        )
+    }
+}
+
+@Composable
+private fun HomeBackgroundLandscapePuzzle() {
+    Box(modifier = Modifier.fillMaxSize()) {
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(top = 88.dp)
+                .fillMaxWidth(0.92f)
+                .aspectRatio(0.78f)
+                .rotate(-6f)
+                .clip(RoundedCornerShape(36.dp))
+                .background(
+                    Brush.verticalGradient(
+                        listOf(Color(0x55FFFFFF), Color(0x55BFE8FF), Color(0x66D6F0E3), Color(0x66E7D8B4))
+                    )
+                )
         ) {
-            Icon(Icons.Default.History, contentDescription = "Adventure History", tint = Color.White)
+            Column(Modifier.fillMaxSize()) {
+                repeat(6) { row ->
+                    Row(Modifier.weight(1f)) {
+                        repeat(4) { col ->
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxSize()
+                                    .background(
+                                        when ((row + col) % 4) {
+                                            0 -> Color(0x22FFFFFF)
+                                            1 -> Color(0x228ED4FF)
+                                            2 -> Color(0x22A2E5C5)
+                                            else -> Color(0x22F6E3A8)
+                                        }
+                                    )
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        Box(
+            modifier = Modifier
+                .align(Alignment.Center)
+                .fillMaxWidth(0.88f)
+                .aspectRatio(0.78f)
+                .clip(RoundedCornerShape(40.dp))
+                .background(
+                    Brush.verticalGradient(
+                        listOf(Color(0x24FFFFFF), Color(0x32DFF1FF), Color(0x28D3E8F0), Color(0x2DE2D2B6))
+                    )
+                )
+        )
+    }
+}
+
+@Composable
+private fun SnapFrameLogo() {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            text = "SnapFrame",
+            color = Color(0xFF26435B),
+            fontSize = 44.sp,
+            lineHeight = 48.sp,
+            fontWeight = FontWeight.Black,
+            letterSpacing = 0.6.sp
+        )
+        Text(
+            text = "Relax. Rebuild. Reveal.",
+            color = Color(0xFF5E7C8E),
+            style = MaterialTheme.typography.titleMedium,
+            fontStyle = FontStyle.Italic
+        )
+    }
+}
+
+@Composable
+private fun PremiumPlayLevelCallToAction(
+    label: String,
+    currentChapter: Int,
+    title: String,
+    onClick: () -> Unit
+) {
+    var animateIn by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { animateIn = true }
+
+    val cardScale by animateFloatAsState(
+        targetValue = if (animateIn) 1f else 0.84f,
+        animationSpec = spring(dampingRatio = 0.58f, stiffness = 320f),
+        label = "playCardScale"
+    )
+    val cardAlpha by animateFloatAsState(
+        targetValue = if (animateIn) 1f else 0f,
+        animationSpec = tween(durationMillis = 420),
+        label = "playCardAlpha"
+    )
+    val badgeScale by animateFloatAsState(
+        targetValue = if (animateIn) 1f else 0.70f,
+        animationSpec = spring(dampingRatio = 0.62f, stiffness = 360f),
+        label = "levelBadgeScale"
+    )
+
+    Box(
+        modifier = Modifier.fillMaxWidth(),
+        contentAlignment = Alignment.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(0.84f)
+                .graphicsLayer {
+                    scaleX = cardScale
+                    scaleY = cardScale
+                    alpha = cardAlpha
+                },
+            contentAlignment = Alignment.BottomCenter
+        ) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(124.dp),
+                shape = RoundedCornerShape(36.dp),
+                color = Color.White.copy(alpha = 0.78f),
+                shadowElevation = 5.dp,
+                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.96f))
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.linearGradient(
+                                listOf(Color(0xFFFFF6EA), Color(0xFFF8F2FF), Color(0xFFEAF8FF))
+                            )
+                        )
+                        .padding(horizontal = 18.dp, vertical = 14.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Surface(
+                        shape = CircleShape,
+                        color = Color(0xFFFFEDC2)
+                    ) {
+                        Text(
+                            text = currentChapter.toString(),
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                            color = Color(0xFF9B6B1B),
+                            fontWeight = FontWeight.Black,
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        text = "LEVEL $currentChapter",
+                        color = Color(0xFF38506A),
+                        fontWeight = FontWeight.Black,
+                        style = MaterialTheme.typography.titleLarge,
+                        letterSpacing = 1.4.sp
+                    )
+                    if (title.isNotBlank()) {
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = title,
+                            color = Color(0xFF6B7D90),
+                            style = MaterialTheme.typography.bodyMedium,
+                            maxLines = 1
+                        )
+                    }
+                }
+            }
+
+            VibrantAction(
+                onClick = onClick,
+                modifier = Modifier
+                    .offset(y = 26.dp)
+                    .graphicsLayer {
+                        scaleX = badgeScale
+                        scaleY = badgeScale
+                        alpha = cardAlpha
+                    }
+                    .width(190.dp)
+                    .height(54.dp),
+                shape = RoundedCornerShape(26.dp),
+                brush = Brush.linearGradient(
+                    listOf(Color(0xFFFFA860), Color(0xFFFF7C79), Color(0xFFFF5EA2))
+                ),
+                contentColor = Color.White,
+                motion = ActionMotion.BOUNCE_UP
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.PlayArrow,
+                        contentDescription = null,
+                        modifier = Modifier.size(28.dp),
+                        tint = Color.White
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Black,
+                        color = Color.White,
+                        letterSpacing = 1.6.sp
+                    )
+                }
+            }
+        }
+    }
+
+    Spacer(Modifier.height(42.dp))
+}
+
+@Composable
+private fun HistoryFloatingButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    VibrantAction(
+        onClick = onClick,
+        modifier = modifier.size(58.dp),
+        shape = RoundedCornerShape(20.dp),
+        brush = Brush.horizontalGradient(listOf(Color(0xFFF5F4FF), Color(0xFFE6F3FF))),
+        contentColor = Color(0xFF37516A),
+        motion = ActionMotion.SHRINK
+    ) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Icon(
+                Icons.Default.History,
+                contentDescription = "History",
+                modifier = Modifier.size(24.dp),
+                tint = Color(0xFF37516A)
+            )
         }
     }
 }
 
+@Composable
+private fun SoftChromeIconButton(icon: ImageVector, contentDescription: String, onClick: () -> Unit) {
+    Surface(
+        modifier = Modifier.clickable(onClick = onClick),
+        shape = CircleShape,
+        color = Color.White.copy(alpha = 0.46f),
+        shadowElevation = 0.dp,
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.66f))
+    ) {
+        Box(
+            modifier = Modifier
+                .size(46.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(icon, contentDescription = contentDescription, tint = Color(0xFF4B6880))
+        }
+    }
+}
 
 @Composable
-private fun PlayInBlockBrand(modifier: Modifier = Modifier) {
-    Box(
-        modifier = modifier
-            .background(
-                brush = Brush.verticalGradient(
-                    colors = listOf(TitlePanelTop, TitlePanelBottom)
-                ),
-                shape = RoundedCornerShape(28.dp)
-            )
-            .padding(horizontal = 12.dp, vertical = 20.dp)
+private fun TopResourcePill(
+    icon: @Composable () -> Unit,
+    value: Int,
+    tintColor: Color,
+    background: Brush,
+    onClick: () -> Unit,
+    motion: ActionMotion
+) {
+    VibrantAction(
+        onClick = onClick,
+        modifier = Modifier
+            .width(84.dp)
+            .height(42.dp),
+        shape = RoundedCornerShape(22.dp),
+        brush = background,
+        contentColor = tintColor,
+        motion = motion
     ) {
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(2.dp)
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
         ) {
+            icon()
+            Spacer(Modifier.width(6.dp))
+            val displayValue = value.coerceAtMost(999999).toString()
             Text(
-                text = "PLAY",
-                modifier = Modifier.fillMaxWidth(),
-                textAlign = TextAlign.Center,
-                color = TitleLight,
-                fontSize = 58.sp,
-                lineHeight = 60.sp,
+                text = displayValue,
+                color = tintColor,
                 fontWeight = FontWeight.Black,
-                letterSpacing = 3.sp
-            )
-            Text(
-                text = "IN",
-                modifier = Modifier.fillMaxWidth(),
-                textAlign = TextAlign.Center,
-                color = TitleWarm,
-                fontSize = 36.sp,
-                lineHeight = 38.sp,
-                fontWeight = FontWeight.ExtraBold,
-                fontStyle = FontStyle.Italic,
-                letterSpacing = 9.sp
-            )
-            Text(
-                text = "BLOCK",
-                modifier = Modifier.fillMaxWidth(),
-                textAlign = TextAlign.Center,
-                color = TitleLight,
-                fontSize = 48.sp,
-                lineHeight = 50.sp,
-                fontWeight = FontWeight.Black,
-                letterSpacing = 0.2.sp,
+                fontSize = when {
+                    displayValue.length >= 6 -> 10.sp
+                    displayValue.length >= 4 -> 11.sp
+                    else -> 13.sp
+                },
                 maxLines = 1,
                 softWrap = false
             )
@@ -232,42 +477,14 @@ private fun PlayInBlockBrand(modifier: Modifier = Modifier) {
 }
 
 @Composable
+private fun PlayInBlockBrand(modifier: Modifier = Modifier) {}
+
+@Composable
 private fun CurrentLevelButtonCard(
     currentChapter: Int,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
-) {
-    VibrantAction(
-        onClick = onClick,
-        modifier = modifier
-            .height(84.dp),
-        shape = RoundedCornerShape(28.dp),
-        brush = VibrantOrangeBrush,
-        motion = ActionMotion.BOUNCE_UP
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 22.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
-        ) {
-            Text(
-                text = "LEVEL $currentChapter",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Black,
-                color = Color.White
-            )
-            Spacer(Modifier.width(10.dp))
-            Icon(
-                imageVector = Icons.Default.PlayArrow,
-                contentDescription = null,
-                tint = Color.White,
-                modifier = Modifier.size(30.dp)
-            )
-        }
-    }
-}
+) {}
 
 @Composable
 private fun HomeResourceMiniButton(
@@ -275,56 +492,9 @@ private fun HomeResourceMiniButton(
     badgeColor: Color,
     motion: ActionMotion,
     onClick: () -> Unit,
+    backgroundBrush: Brush,
     icon: @Composable () -> Unit
-) {
-    Box(
-        modifier = Modifier
-            .widthIn(min = 54.dp)
-            .heightIn(min = 48.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        VibrantAction(
-            onClick = onClick,
-            modifier = Modifier.size(40.dp),
-            shape = CircleShape,
-            brush = Brush.linearGradient(
-                listOf(Color(0x28FFFFFF), Color(0x10FFFFFF))
-            ),
-            motion = motion
-        ) {
-            icon()
-        }
-        val text = value.coerceAtMost(999999).toString()
-        Surface(
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .widthIn(min = 20.dp, max = 52.dp)
-                .heightIn(min = 18.dp),
-            shape = CircleShape,
-            color = badgeColor,
-            shadowElevation = 2.dp,
-            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.88f))
-        ) {
-            Box(
-                modifier = Modifier.padding(horizontal = if (text.length >= 5) 4.dp else 6.dp, vertical = 1.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = text,
-                    color = Color(0xFF352400),
-                    fontWeight = FontWeight.Black,
-                    fontSize = when {
-                        text.length >= 6 -> 8.sp
-                        text.length >= 4 -> 9.sp
-                        else -> 10.sp
-                    },
-                    maxLines = 1,
-                    softWrap = false
-                )
-            }
-        }
-    }
-}
+) {}
 
 @Composable
 fun SettingsScreen(
