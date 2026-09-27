@@ -285,19 +285,19 @@ private fun PremiumPlayLevelCallToAction(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(312.dp),
+            .height(288.dp),
         contentAlignment = Alignment.TopCenter
     ) {
         Surface(
             modifier = Modifier
-                .fillMaxWidth(0.78f)
-                .height(250.dp)
+                .fillMaxWidth(0.67f)
+                .height(210.dp)
                 .graphicsLayer {
                     scaleX = cardScale
                     scaleY = cardScale
                     alpha = cardAlpha
                 },
-            shape = RoundedCornerShape(34.dp),
+            shape = RoundedCornerShape(28.dp),
             color = Color.White.copy(alpha = 0.80f),
             shadowElevation = 6.dp,
             border = BorderStroke(1.dp, Color.White.copy(alpha = 0.96f))
@@ -315,14 +315,14 @@ private fun PremiumPlayLevelCallToAction(
                 Box(
                     modifier = Modifier
                         .align(Alignment.Center)
-                        .offset(y = (-28).dp)
-                        .size(172.dp),
+                        .offset(y = (-18).dp)
+                        .size(146.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Default.Star,
                         contentDescription = null,
-                        modifier = Modifier.size(160.dp),
+                        modifier = Modifier.size(136.dp),
                         tint = Color(0xFFFFC94A)
                     )
                     Text(
@@ -331,7 +331,7 @@ private fun PremiumPlayLevelCallToAction(
                         color = Color(0xFF855600),
                         textAlign = TextAlign.Center,
                         fontWeight = FontWeight.Black,
-                        fontSize = 42.sp,
+                        fontSize = 34.sp,
                         style = MaterialTheme.typography.headlineLarge.copy(
                             shadow = Shadow(
                                 color = Color.White.copy(alpha = 0.96f),
@@ -349,14 +349,14 @@ private fun PremiumPlayLevelCallToAction(
             onClick = onClick,
             modifier = Modifier
                 .align(Alignment.TopCenter)
-                .offset(y = 220.dp)
+                .offset(y = 184.dp)
                 .graphicsLayer {
                     scaleX = playScale
                     scaleY = playScale
                     alpha = cardAlpha
                 }
-                .width(208.dp)
-                .height(56.dp),
+                .width(172.dp)
+                .height(58.dp),
             shape = RoundedCornerShape(24.dp),
             brush = Brush.linearGradient(
                 listOf(Color(0xFFFFA860), Color(0xFFFF7C79), Color(0xFFFF5EA2))
@@ -387,7 +387,7 @@ private fun PremiumPlayLevelCallToAction(
         }
     }
 
-    Spacer(Modifier.height(56.dp))
+    Spacer(Modifier.height(48.dp))
 }
 
 @Composable
@@ -624,7 +624,7 @@ private fun ImageSourceRow(
             verticalAlignment = Alignment.CenterVertically
         ) {
             icon()
-            Column(modifier = Modifier.fillMaxWidth(0.78f).padding(horizontal = 12.dp)) {
+            Column(modifier = Modifier.fillMaxWidth(0.67f).padding(horizontal = 12.dp)) {
                 Text(title, fontWeight = FontWeight.Medium)
                 Text(
                     subtitle,
