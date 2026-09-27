@@ -164,11 +164,32 @@ fun HomeScreen(
             Spacer(Modifier.height(18.dp))
 
             PremiumPlayLevelCallToAction(
-                label = "PLAY",
+                label = if (hasSavedGame) "CONTINUE" else "NEW GAME",
                 currentChapter = currentChapter,
                 title = currentChapterTitle,
                 onClick = primaryAction
             )
+
+            if (hasSavedGame) {
+                VibrantAction(
+                    onClick = onStartJourney,
+                    modifier = Modifier
+                        .width(168.dp)
+                        .height(48.dp),
+                    shape = RoundedCornerShape(20.dp),
+                    brush = Brush.horizontalGradient(listOf(Color(0xFFE8F7FF), Color(0xFFF1EBFF))),
+                    contentColor = Color(0xFF35516A),
+                    motion = ActionMotion.BOUNCE_UP
+                ) {
+                    Text(
+                        text = "NEW GAME",
+                        color = Color(0xFF35516A),
+                        fontWeight = FontWeight.Black,
+                        letterSpacing = 0.8.sp
+                    )
+                }
+                Spacer(Modifier.height(10.dp))
+            }
 
             Spacer(Modifier.weight(1f))
         }
@@ -422,7 +443,7 @@ private fun SoftChromeIconButton(icon: ImageVector, contentDescription: String, 
     ) {
         Box(
             modifier = Modifier
-                .size(46.dp),
+                .size(48.dp),
             contentAlignment = Alignment.Center
         ) {
             Icon(icon, contentDescription = contentDescription, tint = Color(0xFF4B6880))
@@ -443,7 +464,7 @@ private fun TopResourcePill(
         onClick = onClick,
         modifier = Modifier
             .width(84.dp)
-            .height(42.dp),
+            .height(48.dp),
         shape = RoundedCornerShape(22.dp),
         brush = background,
         contentColor = tintColor,
@@ -738,7 +759,7 @@ private fun ScreenHeader(title: String, onBack: () -> Unit) {
     ) {
         VibrantCircleAction(
             onClick = onBack,
-            modifier = Modifier.size(44.dp),
+            modifier = Modifier.size(48.dp),
             brush = VibrantBlueBrush,
             motion = ActionMotion.SHRINK
         ) {

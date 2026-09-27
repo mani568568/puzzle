@@ -22,6 +22,7 @@ private object Routes {
     const val SETTINGS = "settings"
     const val HOW_TO = "how_to"
     const val HISTORY = "history"
+    const val LEVELS = "levels"
     const val GAME_PATTERN = "game/{levelId}/{gridSize}"
     const val REPLAY_PATTERN = "replay/{levelId}/{gridSize}"
 
@@ -86,13 +87,28 @@ fun CozyBlocksApp(settings: GameSettings) {
                         ?: chapter.pickGridSize()
                     navController.navigate(Routes.game(chapterId, gridSize))
                 },
-                onStartJourney = {
-                    val gridSize = currentLevel.pickGridSize()
-                    navController.navigate(Routes.game(currentChapter, gridSize))
-                },
+                onStartJourney = { navController.navigate(Routes.LEVELS) },
                 onJourneyHistory = { navController.navigate(Routes.HISTORY) },
                 onHowToPlay = { navController.navigate(Routes.HOW_TO) },
                 onSettings = { navController.navigate(Routes.SETTINGS) }
+            )
+        }
+
+        composable(Routes.LEVELS) {
+            LevelSelectionScreen(
+                highestUnlocked = highestLevel,
+                completedLevels = completedLevels,
+                onBack = { navController.popBackStack() },
+                onSelectLevel = { levelId ->
+                    val level = PuzzleLevel.requireLevel(levelId)
+                    val gridSize = level.pickGridSize()
+                    scope.launch {
+                        settings.clearSession()
+                        navController.navigate(Routes.game(levelId, gridSize)) {
+                            launchSingleTop = true
+                        }
+                    }
+                }
             )
         }
 

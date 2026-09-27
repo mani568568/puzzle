@@ -269,14 +269,14 @@ private fun HistoryResourceMiniButton(
     val text = value.coerceAtMost(999999).toString()
     Box(
         modifier = Modifier
-            .width(54.dp)
-            .height(54.dp),
+            .width(58.dp)
+            .height(58.dp),
         contentAlignment = Alignment.Center
     ) {
         VibrantAction(
             onClick = {},
             modifier = Modifier
-                 .size(42.dp)
+                 .size(48.dp)
                 .semantics { contentDescription = description },
             shape = CircleShape,
             brush = Brush.linearGradient(listOf(Color(0xFFFFFFFF), Color(0xFFF1F3FF))),
@@ -476,7 +476,7 @@ private fun StatTile(label: String, value: String, modifier: Modifier = Modifier
 private fun JournalFilterButton(label: String, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
     VibrantAction(
         onClick = onClick,
-        modifier = modifier.heightIn(min = 46.dp),
+        modifier = modifier.heightIn(min = 48.dp),
         shape = CircleShape,
         brush = if (selected) VibrantBlueBrush else Brush.linearGradient(
             listOf(Color(0xFFFFD7E5), Color(0xFFFFE7B8), Color(0xFFDDF7F0))

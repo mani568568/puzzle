@@ -177,7 +177,7 @@ fun PicturePuzzleGameScreen(
             ) {
                 VibrantCircleAction(
                     onClick = { vm.saveAndLeave(onBack) },
-                    modifier = Modifier.size(42.dp),
+                    modifier = Modifier.size(48.dp),
                     brush = Brush.linearGradient(
                         listOf(Color(0xFF35C6D0), Color(0xFF1F9DA6), Color(0xFF5F74F3))
                     ),
@@ -515,7 +515,7 @@ fun PicturePuzzleGameScreen(
                 Text("Progress hasn’t been saved yet. Please retry before leaving.", color = MaterialTheme.colorScheme.error)
                 VibrantAction(
                     onClick = vm::retrySave,
-                    modifier = Modifier.height(46.dp).fillMaxWidth(0.5f),
+                    modifier = Modifier.height(48.dp).fillMaxWidth(0.5f),
                     brush = VibrantPinkBrush,
                     motion = ActionMotion.SHAKE
                 ) { Text("Retry save", color = Color.White, fontWeight = FontWeight.Bold) }
@@ -743,7 +743,7 @@ private fun ResourceNotificationAction(
         VibrantAction(
             onClick = onClick,
             modifier = Modifier
-                .size(46.dp)
+                .size(48.dp)
                 .semantics { this.contentDescription = description },
             shape = CircleShape,
             brush = Brush.linearGradient(
