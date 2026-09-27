@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -51,6 +52,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.font.FontStyle
@@ -63,6 +65,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -264,8 +267,8 @@ private fun PremiumPlayLevelCallToAction(
     LaunchedEffect(Unit) { animateIn = true }
 
     val cardScale by animateFloatAsState(
-        targetValue = if (animateIn) 1f else 0.84f,
-        animationSpec = spring(dampingRatio = 0.58f, stiffness = 320f),
+        targetValue = if (animateIn) 1f else 0.90f,
+        animationSpec = spring(dampingRatio = 0.60f, stiffness = 300f),
         label = "playCardScale"
     )
     val cardAlpha by animateFloatAsState(
@@ -273,122 +276,118 @@ private fun PremiumPlayLevelCallToAction(
         animationSpec = tween(durationMillis = 420),
         label = "playCardAlpha"
     )
-    val badgeScale by animateFloatAsState(
-        targetValue = if (animateIn) 1f else 0.70f,
-        animationSpec = spring(dampingRatio = 0.62f, stiffness = 360f),
-        label = "levelBadgeScale"
+    val playScale by animateFloatAsState(
+        targetValue = if (animateIn) 1f else 0.76f,
+        animationSpec = spring(dampingRatio = 0.56f, stiffness = 340f),
+        label = "playScale"
     )
 
     Box(
-        modifier = Modifier.fillMaxWidth(),
-        contentAlignment = Alignment.Center
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(312.dp),
+        contentAlignment = Alignment.TopCenter
     ) {
-        Box(
+        Surface(
             modifier = Modifier
-                .fillMaxWidth(0.84f)
+                .fillMaxWidth(0.78f)
+                .height(250.dp)
                 .graphicsLayer {
                     scaleX = cardScale
                     scaleY = cardScale
                     alpha = cardAlpha
                 },
-            contentAlignment = Alignment.BottomCenter
+            shape = RoundedCornerShape(34.dp),
+            color = Color.White.copy(alpha = 0.80f),
+            shadowElevation = 6.dp,
+            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.96f))
         ) {
-            Surface(
+            Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(124.dp),
-                shape = RoundedCornerShape(36.dp),
-                color = Color.White.copy(alpha = 0.78f),
-                shadowElevation = 5.dp,
-                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.96f))
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(
-                            Brush.linearGradient(
-                                listOf(Color(0xFFFFF6EA), Color(0xFFF8F2FF), Color(0xFFEAF8FF))
-                            )
+                    .fillMaxSize()
+                    .background(
+                        Brush.linearGradient(
+                            listOf(Color(0xFFFFF7EE), Color(0xFFF8F3FF), Color(0xFFEAF8FF))
                         )
-                        .padding(horizontal = 18.dp, vertical = 14.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    Surface(
-                        shape = CircleShape,
-                        color = Color(0xFFFFEDC2)
-                    ) {
-                        Text(
-                            text = currentChapter.toString(),
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                            color = Color(0xFF9B6B1B),
-                            fontWeight = FontWeight.Black,
-                            style = MaterialTheme.typography.titleMedium
-                        )
-                    }
-                    Spacer(Modifier.height(10.dp))
-                    Text(
-                        text = "LEVEL $currentChapter",
-                        color = Color(0xFF38506A),
-                        fontWeight = FontWeight.Black,
-                        style = MaterialTheme.typography.titleLarge,
-                        letterSpacing = 1.4.sp
                     )
-                    if (title.isNotBlank()) {
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            text = title,
-                            color = Color(0xFF6B7D90),
-                            style = MaterialTheme.typography.bodyMedium,
-                            maxLines = 1
-                        )
-                    }
-                }
-            }
-
-            VibrantAction(
-                onClick = onClick,
-                modifier = Modifier
-                    .offset(y = 26.dp)
-                    .graphicsLayer {
-                        scaleX = badgeScale
-                        scaleY = badgeScale
-                        alpha = cardAlpha
-                    }
-                    .width(190.dp)
-                    .height(54.dp),
-                shape = RoundedCornerShape(26.dp),
-                brush = Brush.linearGradient(
-                    listOf(Color(0xFFFFA860), Color(0xFFFF7C79), Color(0xFFFF5EA2))
-                ),
-                contentColor = Color.White,
-                motion = ActionMotion.BOUNCE_UP
+                    .padding(horizontal = 18.dp, vertical = 18.dp)
             ) {
-                Row(
-                    modifier = Modifier.fillMaxSize(),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .offset(y = (-28).dp)
+                        .size(172.dp),
+                    contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        Icons.Default.PlayArrow,
+                        imageVector = Icons.Default.Star,
                         contentDescription = null,
-                        modifier = Modifier.size(28.dp),
-                        tint = Color.White
+                        modifier = Modifier.size(160.dp),
+                        tint = Color(0xFFFFC94A)
                     )
-                    Spacer(Modifier.width(8.dp))
                     Text(
-                        text = label,
-                        style = MaterialTheme.typography.titleLarge,
+                        text = currentChapter.toString(),
+                        modifier = Modifier.align(Alignment.Center),
+                        color = Color(0xFF855600),
+                        textAlign = TextAlign.Center,
                         fontWeight = FontWeight.Black,
-                        color = Color.White,
-                        letterSpacing = 1.6.sp
+                        fontSize = 42.sp,
+                        style = MaterialTheme.typography.headlineLarge.copy(
+                            shadow = Shadow(
+                                color = Color.White.copy(alpha = 0.96f),
+                                offset = Offset(0f, 0f),
+                                blurRadius = 14f
+                            )
+                        )
                     )
                 }
+
+            }
+        }
+
+        VibrantAction(
+            onClick = onClick,
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .offset(y = 220.dp)
+                .graphicsLayer {
+                    scaleX = playScale
+                    scaleY = playScale
+                    alpha = cardAlpha
+                }
+                .width(208.dp)
+                .height(56.dp),
+            shape = RoundedCornerShape(24.dp),
+            brush = Brush.linearGradient(
+                listOf(Color(0xFFFFA860), Color(0xFFFF7C79), Color(0xFFFF5EA2))
+            ),
+            contentColor = Color.White,
+            motion = ActionMotion.BOUNCE_UP
+        ) {
+            Row(
+                modifier = Modifier.fillMaxSize(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    Icons.Default.PlayArrow,
+                    contentDescription = null,
+                    modifier = Modifier.size(26.dp),
+                    tint = Color.White
+                )
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Black,
+                    color = Color.White,
+                    letterSpacing = 1.6.sp
+                )
             }
         }
     }
 
-    Spacer(Modifier.height(42.dp))
+    Spacer(Modifier.height(56.dp))
 }
 
 @Composable
