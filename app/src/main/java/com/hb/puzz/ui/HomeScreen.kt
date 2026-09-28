@@ -101,7 +101,6 @@ fun HomeScreen(
     onSettings: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val primaryAction = if (hasSavedGame) onContinue else onStartJourney
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -164,32 +163,12 @@ fun HomeScreen(
             Spacer(Modifier.height(18.dp))
 
             PremiumPlayLevelCallToAction(
-                label = if (hasSavedGame) "CONTINUE" else "NEW GAME",
                 currentChapter = currentChapter,
                 title = currentChapterTitle,
-                onClick = primaryAction
+                continueEnabled = hasSavedGame,
+                onContinue = onContinue,
+                onNewGame = onStartJourney
             )
-
-            if (hasSavedGame) {
-                VibrantAction(
-                    onClick = onStartJourney,
-                    modifier = Modifier
-                        .width(168.dp)
-                        .height(48.dp),
-                    shape = RoundedCornerShape(20.dp),
-                    brush = Brush.horizontalGradient(listOf(Color(0xFFE8F7FF), Color(0xFFF1EBFF))),
-                    contentColor = Color(0xFF35516A),
-                    motion = ActionMotion.BOUNCE_UP
-                ) {
-                    Text(
-                        text = "NEW GAME",
-                        color = Color(0xFF35516A),
-                        fontWeight = FontWeight.Black,
-                        letterSpacing = 0.8.sp
-                    )
-                }
-                Spacer(Modifier.height(10.dp))
-            }
 
             Spacer(Modifier.weight(1f))
         }
@@ -279,10 +258,11 @@ private fun SnapFrameLogo() {
 
 @Composable
 private fun PremiumPlayLevelCallToAction(
-    label: String,
     currentChapter: Int,
     title: String,
-    onClick: () -> Unit
+    continueEnabled: Boolean,
+    onContinue: () -> Unit,
+    onNewGame: () -> Unit
 ) {
     var animateIn by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { animateIn = true }
@@ -306,7 +286,7 @@ private fun PremiumPlayLevelCallToAction(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(288.dp),
+            .height(318.dp),
         contentAlignment = Alignment.TopCenter
     ) {
         Surface(
@@ -367,7 +347,8 @@ private fun PremiumPlayLevelCallToAction(
         }
 
         VibrantAction(
-            onClick = onClick,
+            onClick = onContinue,
+            enabled = continueEnabled,
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .offset(y = 184.dp)
@@ -379,9 +360,11 @@ private fun PremiumPlayLevelCallToAction(
                 .width(172.dp)
                 .height(58.dp),
             shape = RoundedCornerShape(24.dp),
-            brush = Brush.linearGradient(
-                listOf(Color(0xFFFFA860), Color(0xFFFF7C79), Color(0xFFFF5EA2))
-            ),
+            brush = if (continueEnabled) {
+                Brush.linearGradient(listOf(Color(0xFFFFA860), Color(0xFFFF7C79), Color(0xFFFF5EA2)))
+            } else {
+                Brush.linearGradient(listOf(Color(0xFFD9DCE4), Color(0xFFC8CED8)))
+            },
             contentColor = Color.White,
             motion = ActionMotion.BOUNCE_UP
         ) {
@@ -398,17 +381,42 @@ private fun PremiumPlayLevelCallToAction(
                 )
                 Spacer(Modifier.width(6.dp))
                 Text(
-                    text = label,
-                    style = MaterialTheme.typography.titleLarge,
+                    text = "CONTINUE",
+                    style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Black,
                     color = Color.White,
-                    letterSpacing = 1.6.sp
+                    letterSpacing = 1.2.sp
                 )
             }
         }
+
+        VibrantAction(
+            onClick = onNewGame,
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .offset(y = 252.dp)
+                .graphicsLayer {
+                    scaleX = playScale
+                    scaleY = playScale
+                    alpha = cardAlpha
+                }
+                .width(154.dp)
+                .height(48.dp),
+            shape = RoundedCornerShape(20.dp),
+            brush = Brush.horizontalGradient(listOf(Color(0xFFE8F7FF), Color(0xFFF1EBFF))),
+            contentColor = Color(0xFF35516A),
+            motion = ActionMotion.BOUNCE_UP
+        ) {
+            Text(
+                text = "NEW GAME",
+                color = Color(0xFF35516A),
+                fontWeight = FontWeight.Black,
+                letterSpacing = 0.9.sp
+            )
+        }
     }
 
-    Spacer(Modifier.height(48.dp))
+    Spacer(Modifier.height(24.dp))
 }
 
 @Composable

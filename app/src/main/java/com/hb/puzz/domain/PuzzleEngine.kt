@@ -275,12 +275,107 @@ class PuzzleEngine(
         val before = positions.clone()
         val updated = positions.clone()
 
-        // Move displaced loose/other-group tiles into the cells the moving cluster leaves behind.
-        incoming.zip(vacated).forEach { (incomingPosition, vacatedPosition) ->
-            updated[vacatedPosition] = before[incomingPosition]
+        /*
+         * Reflow anything already occupying the destination footprint into the cells released by
+         * the dragged block. We first try to keep an obstructing merged block rigid when its full
+         * shape can fit inside the released footprint. If that is not possible, only the pieces
+         * actually in the way are redistributed to the nearest available released cells.
+         *
+         * This is intentionally geometry-aware rather than incoming.sorted().zip(vacated.sorted()):
+         * the old index-based swap could make displaced pieces jump to visually unrelated rows.
+         * The new assignment minimizes travel and makes merged-vs-merged drops feel much more
+         * physical while still preserving a valid full-board permutation.
+         */
+        val availableVacated = vacated.toMutableSet()
+        val displacedTileIds = incoming.map { before[it] }.toMutableSet()
+        val relocationByTile = linkedMapOf<Int, Int>()
+
+        // Preserve a destination merged block as one rigid shape whenever the entire group is in
+        // the incoming footprint and that shape can be translated into the released cells.
+        val visitedBlockers = mutableSetOf<Int>()
+        displacedTileIds.toList().forEach blockerLoop@ { tileId ->
+            if (tileId in visitedBlockers || tileId in group) return@blockerLoop
+            val blockerGroup = getGroupForTile(tileId)
+            visitedBlockers.addAll(blockerGroup)
+            if (blockerGroup.size <= 1 || !displacedTileIds.containsAll(blockerGroup)) return@blockerLoop
+
+            val sourceByTile = blockerGroup.associateWith { getPositionOf(it) }
+            val anchorBlocker = blockerGroup.minOrNull() ?: return@blockerLoop
+            val anchorSource = sourceByTile[anchorBlocker] ?: return@blockerLoop
+            val anchorSourceRow = anchorSource / gridColumns
+            val anchorSourceCol = anchorSource % gridColumns
+
+            var bestTargets: Map<Int, Int>? = null
+            var bestScore = Int.MAX_VALUE
+            availableVacated.forEach candidateLoop@ { candidateAnchor ->
+                val candidateRow = candidateAnchor / gridColumns
+                val candidateCol = candidateAnchor % gridColumns
+                val deltaRow = candidateRow - anchorSourceRow
+                val deltaCol = candidateCol - anchorSourceCol
+                val candidateTargets = linkedMapOf<Int, Int>()
+                var valid = true
+                var score = 0
+
+                blockerGroup.forEach memberLoop@ { memberTileId ->
+                    val memberSource = sourceByTile[memberTileId] ?: run {
+                        valid = false
+                        return@memberLoop
+                    }
+                    val memberRow = memberSource / gridColumns
+                    val memberCol = memberSource % gridColumns
+                    val targetRow = memberRow + deltaRow
+                    val targetCol = memberCol + deltaCol
+                    if (targetRow !in 0 until gridRows || targetCol !in 0 until gridColumns) {
+                        valid = false
+                        return@memberLoop
+                    }
+                    val target = targetRow * gridColumns + targetCol
+                    if (target !in availableVacated) {
+                        valid = false
+                        return@memberLoop
+                    }
+                    candidateTargets[memberTileId] = target
+                    score += kotlin.math.abs(targetRow - memberRow) + kotlin.math.abs(targetCol - memberCol)
+                }
+
+                if (valid && candidateTargets.size == blockerGroup.size && score < bestScore) {
+                    bestScore = score
+                    bestTargets = candidateTargets
+                }
+            }
+
+            bestTargets?.forEach { (memberTileId, target) ->
+                relocationByTile[memberTileId] = target
+                availableVacated.remove(target)
+                displacedTileIds.remove(memberTileId)
+            }
         }
 
-        // Finally place every member of the rigid cluster at its translated destination.
+        // Anything that could not move as a rigid block gets the nearest free released cell.
+        displacedTileIds
+            .sortedBy { getPositionOf(it) }
+            .forEach { tileId ->
+                val source = getPositionOf(tileId)
+                val sourceRow = source / gridColumns
+                val sourceCol = source % gridColumns
+                val target = availableVacated.minWithOrNull(
+                    compareBy<Int> {
+                        val row = it / gridColumns
+                        val col = it % gridColumns
+                        kotlin.math.abs(row - sourceRow) + kotlin.math.abs(col - sourceCol)
+                    }.thenBy { it }
+                ) ?: return false
+                relocationByTile[tileId] = target
+                availableVacated.remove(target)
+            }
+
+        if (availableVacated.isNotEmpty() || relocationByTile.size != incoming.size) return false
+
+        relocationByTile.forEach { (tileId, targetPosition) ->
+            updated[targetPosition] = tileId
+        }
+
+        // Finally place every member of the rigid dragged cluster at its translated destination.
         targetsByTile.forEach { (tileId, destinationPosition) ->
             updated[destinationPosition] = tileId
         }
@@ -333,9 +428,28 @@ class PuzzleEngine(
     }
 
     companion object {
-        /** Difficulty size N maps to an N x (N+2) portrait grid: two extra rows. */
-        fun columnsForSize(gridSize: Int): Int = gridSize
-        fun rowsForSize(gridSize: Int): Int = gridSize + 2
+        /**
+         * Milestone portrait-grid presets. Each block is intentionally narrower than it is tall.
+         * 4 -> 4x6, 5 -> 5x7, 6 -> 6x9, 7 -> 7x9, 8 -> 7x8.
+         */
+        fun columnsForSize(gridSize: Int): Int = when (gridSize) {
+            4 -> 4
+            5 -> 5
+            6 -> 6
+            7 -> 7
+            8 -> 7
+            else -> gridSize.coerceAtLeast(2)
+        }
+
+        fun rowsForSize(gridSize: Int): Int = when (gridSize) {
+            4 -> 6
+            5 -> 7
+            6 -> 9
+            7 -> 9
+            8 -> 8
+            else -> gridSize.coerceAtLeast(2) + 2
+        }
+
         fun tileCountForSize(gridSize: Int): Int = columnsForSize(gridSize) * rowsForSize(gridSize)
     }
 }
