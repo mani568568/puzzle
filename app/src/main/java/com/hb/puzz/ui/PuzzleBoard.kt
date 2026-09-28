@@ -47,6 +47,8 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import com.hb.puzz.domain.PuzzleEngine
 import com.hb.puzz.domain.mergeContours
 import com.hb.puzz.domain.MergeMotion
@@ -77,15 +79,24 @@ fun PuzzleBoard(
     val gridColumns = engine.gridColumns
     val gridRows = engine.gridRows
     val positions = remember(boardVersion) { engine.getCurrentPositions() }
+    // Keep the previous board permutation for one composition. If a destination merged group is
+    // broken by an incoming rigid group, its newly-loose tiles can animate out of their exact old
+    // cells instead of popping instantly into the vacated cells.
+    var previousArrangement by remember { mutableStateOf(positions.clone()) }
+    val previousArrangementSnapshot = previousArrangement
+    LaunchedEffect(boardVersion) {
+        previousArrangement = positions.clone()
+    }
     val connectedGroups = remember(boardVersion) {
         engine.getConnectedGroups().map { it.toSet() }
     }
     val groupedTileIds = remember(connectedGroups) { connectedGroups.flatten().toSet() }
 
     val surface = Color(0xFFFFF6E8)
-    val gridBorder = MaterialTheme.colorScheme.primary.copy(alpha = 0.65f)
-    val tileDivider = MaterialTheme.colorScheme.surface
+    val gridBorder = Color(0xFFD5B65A)
+    val tileDivider = Color(0xFFFFFBF4)
     val dragAccent = Color(0xFF67C9D7)
+    val mergeGlow = Color(0xFFFFD86B)
     val density = LocalDensity.current
 
     var draggingAnchorTileId by remember { mutableStateOf<Int?>(null) }
@@ -123,7 +134,6 @@ fun PuzzleBoard(
             modifier = Modifier
                 .width(boardWidth)
                 .height(boardHeight)
-                .clip(boardShape)
                 .background(surface, boardShape)
         ) {
             // A single shared preview footprint keeps merged pieces looking like one object.
@@ -131,7 +141,7 @@ fun PuzzleBoard(
             val hovered = hoverPosition
             if (anchor != null && hovered != null) {
                 val previewTargets = engine.getGroupMoveTargets(anchor, hovered)
-                if (previewTargets != null) {
+                if (previewTargets != null && engine.canMoveGroupTo(anchor, hovered)) {
                     val previewPositions = previewTargets.values.toSet()
                     Canvas(modifier = Modifier.width(boardWidth).height(boardHeight)) {
                         val mask = Path()
@@ -189,16 +199,30 @@ fun PuzzleBoard(
                     val cellWidth = with(density) { cellWidthPx.toDp() }
                     val cellHeight = with(density) { cellHeightPx.toDp() }
                     val isDragging = tileId in draggingGroupIds
-                    val animatedX by animateFloatAsState(
-                        targetValue = targetX,
-                        animationSpec = tween(motionDurationMs.coerceIn(180, 600), easing = FastOutSlowInEasing),
-                        label = "tile-x-$tileId"
-                    )
-                    val animatedY by animateFloatAsState(
-                        targetValue = targetY,
-                        animationSpec = tween(motionDurationMs.coerceIn(180, 600), easing = FastOutSlowInEasing),
-                        label = "tile-y-$tileId"
-                    )
+                    val previousPosition = previousArrangementSnapshot.indexOf(tileId)
+                        .takeIf { it >= 0 } ?: position
+                    val previousRow = previousPosition / gridColumns
+                    val previousCol = previousPosition % gridColumns
+                    val previousX = gridX(previousCol).toFloat()
+                    val previousY = gridY(previousRow).toFloat()
+                    val animatedX = remember(tileId) { Animatable(previousX) }
+                    val animatedY = remember(tileId) { Animatable(previousY) }
+                    LaunchedEffect(boardVersion, position) {
+                        coroutineScope {
+                            launch {
+                                animatedX.animateTo(
+                                    targetX,
+                                    tween(motionDurationMs.coerceIn(220, 620), easing = FastOutSlowInEasing)
+                                )
+                            }
+                            launch {
+                                animatedY.animateTo(
+                                    targetY,
+                                    tween(motionDurationMs.coerceIn(220, 620), easing = FastOutSlowInEasing)
+                                )
+                            }
+                        }
+                    }
                     val dragScale by animateFloatAsState(
                         targetValue = if (isDragging) 1.018f else 1f,
                         animationSpec = tween(160, easing = FastOutSlowInEasing),
@@ -216,8 +240,8 @@ fun PuzzleBoard(
                             .height(cellHeight)
                             .offset {
                                 IntOffset(
-                                    (animatedX + visualDrag.x).roundToInt(),
-                                    (animatedY + visualDrag.y).roundToInt()
+                                    (animatedX.value + visualDrag.x).roundToInt(),
+                                    (animatedY.value + visualDrag.y).roundToInt()
                                 )
                             }
                             .zIndex(if (isDragging) 20f else 1f)
@@ -479,9 +503,22 @@ fun PuzzleBoard(
 
                         // A quiet resting border keeps the picture readable. No internal seams.
                         contourPaths.forEach { contour ->
-                            drawPath(contour, if (isDragging) dragAccent else gridBorder.copy(alpha = 0.8f),
-                                style = Stroke(if (isDragging) 2.dp.toPx() else 1.25.dp.toPx(),
-                                    cap = StrokeCap.Butt, join = StrokeJoin.Miter))
+                            if (!isDragging) {
+                                drawPath(
+                                    contour,
+                                    gridBorder.copy(alpha = 0.16f),
+                                    style = Stroke(5.5.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                                )
+                            }
+                            drawPath(
+                                contour,
+                                if (isDragging) dragAccent else gridBorder.copy(alpha = 0.88f),
+                                style = Stroke(
+                                    if (isDragging) 2.2.dp.toPx() else 1.45.dp.toPx(),
+                                    cap = StrokeCap.Round,
+                                    join = StrokeJoin.Round
+                                )
+                            )
                         }
 
                         if (mergeProgress.value < 1f) {
@@ -501,13 +538,13 @@ fun PuzzleBoard(
                                     measure.getSegment(0f, distance, trail, true)
                                     drawPath(
                                         trail,
-                                        Color(0xFFFFD86B).copy(alpha = alpha * 0.22f),
-                                        style = Stroke(13.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                                        mergeGlow.copy(alpha = alpha * 0.30f),
+                                        style = Stroke(16.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
                                     )
                                     drawPath(
                                         trail,
                                         Color(0xFFF6C554).copy(alpha = alpha),
-                                        style = Stroke(4.2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                                        style = Stroke(4.8.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
                                     )
                                     drawPath(
                                         trail,
@@ -526,8 +563,8 @@ fun PuzzleBoard(
                                 contourPaths.forEach { contour ->
                                     drawPath(
                                         contour,
-                                        Color(0xFFFFD86B).copy(alpha = lockPulse * 0.24f),
-                                        style = Stroke(15.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                                        mergeGlow.copy(alpha = lockPulse * 0.30f),
+                                        style = Stroke(18.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
                                     )
                                     drawPath(
                                         contour,
@@ -714,7 +751,7 @@ private fun calculateHoverPosition(
     val targetCol = floor(centerX / tileWidthPx).toInt()
     val targetRow = floor(centerY / tileHeightPx).toInt()
     val candidate = targetRow * gridColumns + targetCol
-    return candidate.takeIf { engine.getGroupMoveTargets(anchorTileId, it) != null }
+    return candidate.takeIf { engine.canMoveGroupTo(anchorTileId, it) }
 }
 
 private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawSingleTile(

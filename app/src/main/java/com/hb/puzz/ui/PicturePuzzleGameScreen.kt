@@ -114,6 +114,14 @@ fun PicturePuzzleGameScreen(
     )
     val finishedReady = finishedTarget && finishedReveal >= 0.92f
     val celebrationBurst = remember(levelId) { Animatable(0f) }
+    val frameMergeGlow = remember(levelId) { Animatable(0f) }
+    LaunchedEffect(ui.celebrationVersion) {
+        if (ui.celebration.isNotEmpty()) {
+            frameMergeGlow.snapTo(0.18f)
+            frameMergeGlow.animateTo(1f, tween(180, easing = FastOutSlowInEasing))
+            frameMergeGlow.animateTo(0f, tween(820, easing = LinearOutSlowInEasing))
+        }
+    }
     LaunchedEffect(finishedTarget) {
         if (finishedTarget) {
             celebrationBurst.snapTo(0f)
@@ -219,7 +227,9 @@ fun PicturePuzzleGameScreen(
             // remains behind the final finished card.
             val puzzleFrameShape = RoundedCornerShape(9.dp)
             val puzzleContentShape = RoundedCornerShape(7.dp)
-            val puzzleFrameColor = Color(0xFFF7EEDB)
+            val puzzleFrameColor = Color(0xFFFFF8E9)
+            val puzzleFrameBorder = Color(0xFFD6AD43)
+            val puzzleFrameGlow = Color(0xFFFFD86B)
             val boardContent: @Composable BoxScope.() -> Unit = {
                 when {
                     ui.loading -> CircularProgressIndicator()
@@ -290,24 +300,62 @@ fun PicturePuzzleGameScreen(
                     content = boardContent
                 )
             } else {
-                Surface(
-                    Modifier.fillMaxWidth(0.935f),
-                    shape = puzzleFrameShape,
-                    color = puzzleFrameColor,
-                    border = BorderStroke(2.dp, Color(0xFF111111)),
-                    tonalElevation = 0.dp,
-                    shadowElevation = 5.dp
+                // Layered champagne-gold frame. The low-alpha outer rings create a soft glow
+                // without a black Material shadow. Each successful merge briefly strengthens the
+                // halo so merges that touch the board edge still visibly light up the frame.
+                val framePulse = frameMergeGlow.value.coerceIn(0f, 1f)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(0.945f)
+                        .aspectRatio(puzzleAspectRatio),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Box(
-                        Modifier
-                            .padding(1.dp)
-                            .fillMaxWidth()
-                            .aspectRatio(puzzleAspectRatio)
-                            .clip(puzzleContentShape)
-                            .background(Color(0xFFFFF6E8)),
-                        contentAlignment = Alignment.Center,
-                        content = boardContent
-                    )
+                    Surface(
+                        modifier = Modifier.fillMaxSize(),
+                        shape = RoundedCornerShape(12.dp),
+                        color = puzzleFrameGlow.copy(alpha = 0.055f + 0.10f * framePulse),
+                        border = BorderStroke(
+                            4.dp,
+                            puzzleFrameGlow.copy(alpha = 0.12f + 0.30f * framePulse)
+                        ),
+                        tonalElevation = 0.dp,
+                        shadowElevation = 0.dp
+                    ) {}
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(3.dp),
+                        shape = RoundedCornerShape(10.dp),
+                        color = Color.Transparent,
+                        border = BorderStroke(
+                            2.dp,
+                            Color(0xFFFFE9A3).copy(alpha = 0.32f + 0.36f * framePulse)
+                        ),
+                        tonalElevation = 0.dp,
+                        shadowElevation = 0.dp
+                    ) {}
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(6.dp),
+                        shape = puzzleFrameShape,
+                        color = puzzleFrameColor,
+                        border = BorderStroke(
+                            2.dp,
+                            puzzleFrameBorder.copy(alpha = 0.94f)
+                        ),
+                        tonalElevation = 0.dp,
+                        shadowElevation = 0.dp
+                    ) {
+                        Box(
+                            Modifier
+                                .padding(1.dp)
+                                .fillMaxSize()
+                                .background(Color(0xFFFFF6E8), puzzleContentShape),
+                            contentAlignment = Alignment.Center,
+                            content = boardContent
+                        )
+                    }
                 }
             }
             if (ui.solved) {

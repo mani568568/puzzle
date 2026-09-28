@@ -242,6 +242,18 @@ class PuzzleEngine(
     }
 
     /**
+     * Returns true when the dragged block can be translated to [targetPosition] without leaving
+     * the board.
+     *
+     * The dragged group itself is always rigid and can never split. Destination pieces are allowed
+     * to reflow into the cells vacated by the moving group. If those destination pieces belonged to
+     * another merged group, that other group may break apart as part of the reflow. This makes
+     * merged-vs-merged interaction feel physical instead of blocking the player's drag.
+     */
+    fun canMoveGroupTo(anchorTileId: Int, targetPosition: Int): Boolean =
+        getGroupMoveTargets(anchorTileId, targetPosition) != null
+
+    /**
      * Moves an already-connected cluster as one rigid block. Tiles occupying the new footprint
      * are shifted into the cells vacated by the cluster, preserving a valid full-board permutation.
      * Existing internal connections cannot break because every member receives the same offset.
@@ -249,6 +261,7 @@ class PuzzleEngine(
     fun attemptMoveGroup(anchorTileId: Int, targetPosition: Int): Boolean {
         val anchorPosition = getPositionOf(anchorTileId)
         if (anchorPosition < 0 || targetPosition == anchorPosition) return false
+        if (!canMoveGroupTo(anchorTileId, targetPosition)) return false
 
         val targetsByTile = getGroupMoveTargets(anchorTileId, targetPosition) ?: return false
         val group = targetsByTile.keys
