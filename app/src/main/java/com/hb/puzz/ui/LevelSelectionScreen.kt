@@ -31,6 +31,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -39,6 +40,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.hb.puzz.domain.PuzzleLevel
+import com.hb.puzz.ui.images.LevelArtworkThumbnail
 
 @Composable
 fun LevelSelectionScreen(
@@ -81,7 +83,7 @@ fun LevelSelectionScreen(
                     color = Color(0xFF243C55)
                 )
                 Text(
-                    text = "20 picture puzzles",
+                    text = "${PuzzleLevel.maxLevelId} picture puzzles",
                     style = MaterialTheme.typography.bodyMedium,
                     color = Color(0xFF65788B)
                 )
@@ -132,24 +134,31 @@ private fun LevelGalleryCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(112.dp)
-                    .background(
-                        brush = if (unlocked) {
-                            Brush.linearGradient(
-                                listOf(Color(0xFFBFEAFF), Color(0xFFDDF5E9), Color(0xFFFFE5B9))
-                            )
-                        } else {
-                            Brush.linearGradient(listOf(Color(0xFFE1E4E9), Color(0xFFF1F2F4)))
-                        },
-                        shape = RoundedCornerShape(18.dp)
-                    ),
+                    .clip(RoundedCornerShape(18.dp)),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = level.id.toString(),
-                    style = MaterialTheme.typography.displaySmall,
-                    fontWeight = FontWeight.Black,
-                    color = if (unlocked) Color(0xFF2F4D65) else Color(0xFF8A929B)
+                LevelArtworkThumbnail(
+                    levelId = level.id,
+                    contentDescription = "Level ${level.id} artwork",
+                    modifier = Modifier.fillMaxSize(),
+                    alpha = if (unlocked) 1f else 0.42f
                 )
+
+                Surface(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(8.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    color = Color.White.copy(alpha = 0.88f)
+                ) {
+                    Text(
+                        text = level.id.toString().padStart(3, '0'),
+                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Black,
+                        color = Color(0xFF2F4D65)
+                    )
+                }
 
                 Surface(
                     modifier = Modifier

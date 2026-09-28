@@ -1,13 +1,12 @@
 package com.hb.puzz.ui
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Lock
@@ -23,10 +22,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -35,7 +32,7 @@ import androidx.compose.ui.unit.sp
 import com.hb.puzz.data.AdventureHistoryEntry
 import com.hb.puzz.data.HomeSnapshot
 import com.hb.puzz.domain.PuzzleLevel
-import com.hb.puzz.ui.images.ImageAssets
+import com.hb.puzz.ui.images.LevelArtworkThumbnail
 import java.text.DateFormat
 import java.util.Date
 
@@ -61,8 +58,15 @@ fun JourneyHistoryScreen(
     val totalTrackedTime = home.history.sumOf { it.totalElapsedMillis }
     val fastestTime = home.history.map { it.bestElapsedMillis }.filter { it > 0 }.minOrNull() ?: 0L
     val progress = (home.completed.size.toFloat() / maxAdventure.toFloat()).coerceIn(0f, 1f)
+    val visibleLevels = remember(filter, home.completed) {
+        when (filter) {
+            JournalFilter.ALL -> PuzzleLevel.ALL_LEVELS
+            JournalFilter.FINISHED -> PuzzleLevel.ALL_LEVELS.filter { it.id in home.completed }
+            JournalFilter.MILESTONES -> emptyList()
+        }
+    }
 
-    Column(
+    LazyColumn(
         modifier = modifier
             .fillMaxSize()
             .background(
@@ -70,54 +74,60 @@ fun JourneyHistoryScreen(
                     listOf(Color(0xFFFFF3DB), Color(0xFFE9F8FF), Color(0xFFF5EAFF), Color(0xFFFFEEF4))
                 )
             )
-            .safeDrawingPadding()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 18.dp, vertical = 14.dp),
+            .safeDrawingPadding(),
+        contentPadding = PaddingValues(horizontal = 18.dp, vertical = 14.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
-        HistoryHeroCard(
-            crystals = home.crystals,
-            coins = home.coins,
-            onBack = onBack
-        )
+        item(key = "hero") {
+            HistoryHeroCard(
+                crystals = home.crystals,
+                coins = home.coins,
+                onBack = onBack
+            )
+        }
 
-        JourneySummaryCard(
-            completed = home.completed.size,
-            maxAdventure = maxAdventure,
-            milestones = completedMilestones,
-            progress = progress
-        )
+        item(key = "summary") {
+            JourneySummaryCard(
+                completed = home.completed.size,
+                maxAdventure = maxAdventure,
+                milestones = completedMilestones,
+                progress = progress
+            )
+        }
 
-        StatsGrid(
-            moves = totalTrackedMoves,
-            playTime = totalTrackedTime,
-            fastestTime = fastestTime,
-            wallet = home.coins
-        )
+        item(key = "stats") {
+            StatsGrid(
+                moves = totalTrackedMoves,
+                playTime = totalTrackedTime,
+                fastestTime = fastestTime,
+                wallet = home.coins
+            )
+        }
 
-        SectionHeader(
-            title = "Past Adventures",
-            subtitle = "Tap a card"
-        )
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            JournalFilterButton("All", filter == JournalFilter.ALL, Modifier.weight(1f)) {
-                filterName = JournalFilter.ALL.name
-            }
-            JournalFilterButton("Finished", filter == JournalFilter.FINISHED, Modifier.weight(1f)) {
-                filterName = JournalFilter.FINISHED.name
-            }
-            JournalFilterButton("Milestones", filter == JournalFilter.MILESTONES, Modifier.weight(1f)) {
-                filterName = JournalFilter.MILESTONES.name
+        item(key = "filters") {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                SectionHeader(title = "Past Adventures", subtitle = "Tap a card")
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    JournalFilterButton("All", filter == JournalFilter.ALL, Modifier.weight(1f)) {
+                        filterName = JournalFilter.ALL.name
+                    }
+                    JournalFilterButton("Finished", filter == JournalFilter.FINISHED, Modifier.weight(1f)) {
+                        filterName = JournalFilter.FINISHED.name
+                    }
+                    JournalFilterButton("Milestones", filter == JournalFilter.MILESTONES, Modifier.weight(1f)) {
+                        filterName = JournalFilter.MILESTONES.name
+                    }
+                }
             }
         }
 
         if (filter != JournalFilter.MILESTONES) {
-            PuzzleLevel.ALL_LEVELS.forEach { level ->
+            items(visibleLevels, key = { "adventure-${it.id}" }) { level ->
                 val completed = level.id in home.completed
-                if (filter == JournalFilter.ALL || completed) {
-                    val inProgress = home.saved?.levelId == level.id
-                    val ready = !completed && !inProgress && home.saved == null && level.id == home.highest
-                    val unlocked = completed || inProgress || ready
+                val inProgress = home.saved?.levelId == level.id
+                val ready = !completed && !inProgress && home.saved == null && level.id == home.highest
+                val unlocked = completed || inProgress || ready
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     AdventureJournalCard(
                         level = level,
                         history = historyById[level.id],
@@ -132,23 +142,23 @@ fun JourneyHistoryScreen(
                         onOpenAdventure = { onOpenAdventure(level.id) },
                         onReplayAdventure = { onReplayAdventure(level.id) }
                     )
-                }
-                if (level.id % JOURNAL_ADVENTURES_PER_MILESTONE == 0) {
-                    val number = level.id / JOURNAL_ADVENTURES_PER_MILESTONE
-                    val reached = isMilestoneReached(number, home.completed)
-                    if (filter == JournalFilter.ALL || (filter == JournalFilter.FINISHED && reached)) {
-                        MilestoneJournalCard(number = number, reached = reached)
+                    if (level.id % JOURNAL_ADVENTURES_PER_MILESTONE == 0) {
+                        val number = level.id / JOURNAL_ADVENTURES_PER_MILESTONE
+                        val reached = isMilestoneReached(number, home.completed)
+                        if (filter == JournalFilter.ALL || (filter == JournalFilter.FINISHED && reached)) {
+                            MilestoneJournalCard(number = number, reached = reached)
+                        }
                     }
                 }
             }
         } else {
             val count = (maxAdventure + JOURNAL_ADVENTURES_PER_MILESTONE - 1) / JOURNAL_ADVENTURES_PER_MILESTONE
-            (1..count).forEach { number ->
+            items((1..count).toList(), key = { "milestone-$it" }) { number ->
                 MilestoneJournalCard(number = number, reached = isMilestoneReached(number, home.completed))
             }
         }
 
-        Spacer(Modifier.height(12.dp))
+        item(key = "bottom-space") { Spacer(Modifier.height(12.dp)) }
     }
 }
 
@@ -519,14 +529,13 @@ private fun AdventureJournalCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Box {
-                    Image(
-                        painter = painterResource(ImageAssets.getLevelImage(level.id)),
+                    LevelArtworkThumbnail(
+                        levelId = level.id,
                         contentDescription = "Adventure ${level.id} artwork",
                         modifier = Modifier
                             .size(72.dp)
                             .clip(RoundedCornerShape(18.dp))
                             .then(if (!unlocked) Modifier.blur(18.dp) else Modifier),
-                        contentScale = ContentScale.Crop,
                         alpha = if (unlocked) 1f else 0.58f
                     )
                     if (!unlocked) {

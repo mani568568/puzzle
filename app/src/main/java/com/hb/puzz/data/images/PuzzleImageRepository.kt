@@ -74,6 +74,13 @@ class PuzzleImageRepository(
         }
     }
 
+    suspend fun prefetchBundledLevel(levelId: Int) = withContext(Dispatchers.IO) {
+        if (levelId in 1..PuzzleLevel.maxLevelId) {
+            runCatching { ImageAssets.loadBitmap(appContext, levelId) }
+        }
+        Unit
+    }
+
     suspend fun refreshLevelImage(level: PuzzleLevel): PuzzleImage = withContext(Dispatchers.IO) {
         val replacement = loadLevelImage(level, ImageSourceMode.PEXELS, forceRefresh = true)
         if (replacement.usedFallback) loadLevelImage(level, ImageSourceMode.PEXELS) else {

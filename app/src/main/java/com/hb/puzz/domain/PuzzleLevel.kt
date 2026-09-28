@@ -23,19 +23,12 @@ data class PuzzleLevel(
 
     val isRandomGrid: Boolean get() = randomGridSizes != null
 
-    /** The grid selected when an Adventure starts normally, before the optional Grid Shift. */
     fun acceptsBaseGridSize(size: Int): Boolean = randomGridSizes?.contains(size) ?: (size == gridSize)
 
-    /**
-     * A saved/current session may temporarily use a Grid Shift up to two sizes below its base.
-     * This keeps the same Adventure/image while making the puzzle easier with fewer, larger pieces
-     * such as 6×7 -> 5×6 / 4×5.
-     */
     fun acceptsSessionGridSize(baseGridSize: Int, size: Int): Boolean =
         acceptsBaseGridSize(baseGridSize) &&
             size in maxOf(MIN_GRID_SIZE, baseGridSize - 2)..baseGridSize
 
-    /** Broad route validation. The exact base/shift pairing is validated in GameSettings. */
     fun acceptsGridSize(size: Int): Boolean {
         val baseRange = randomGridSizes ?: (gridSize..gridSize)
         return size in maxOf(MIN_GRID_SIZE, baseRange.first - 2)..baseRange.last
@@ -56,52 +49,71 @@ data class PuzzleLevel(
         } ?: "${PuzzleEngine.columnsForSize(gridSize)}×${PuzzleEngine.rowsForSize(gridSize)} Grid"
 
     companion object {
-        /** Keep tiles comfortably touchable and within the reward/performance model. */
         const val MIN_GRID_SIZE: Int = 2
         const val MAX_GRID_SIZE: Int = 8
 
         /**
-         * Progression philosophy:
-         *  - Chapters 1–5: 4×5 so players learn the merge mechanic without tiny tiles.
-         *  - Chapters 6–8: 5×6.
-         *  - Chapters 9–11: 6×7.
-         *  - Chapters 12–14: 7×8.
-         *  - Chapter 15: first full 8×9 challenge.
-         *  - Chapters 16–19: surprise rectangular grids based on sizes 6 through 8.
-         *  - Chapter 20: fixed 8×9 finale.
+         * drawable-nodpi contains level_001.jpeg ... level_999.jpeg, therefore levels are generated
+         * instead of hard-coded. This keeps lookup O(1), avoids a 999-entry source file, and makes it
+         * straightforward to extend the catalog later.
          */
-        val ALL_LEVELS: List<PuzzleLevel> = listOf(
-            PuzzleLevel(1, "Chipmunk", 4, Difficulty.EASY),
-            PuzzleLevel(2, "Curious Cat", 4, Difficulty.EASY),
-            PuzzleLevel(3, "Celebration Cake", 4, Difficulty.EASY),
-            PuzzleLevel(4, "Lighthouse Coast", 4, Difficulty.EASY),
-            PuzzleLevel(5, "Classic Racer", 4, Difficulty.EASY),
+        const val MAX_LEVEL_ID: Int = 999
 
-            PuzzleLevel(6, "Travel Table", 5, Difficulty.MEDIUM),
-            PuzzleLevel(7, "Off-Road Beast", 5, Difficulty.MEDIUM),
-            PuzzleLevel(8, "Emerald Eye", 5, Difficulty.MEDIUM),
-
-            PuzzleLevel(9, "Red Rock Valley", 6, Difficulty.MEDIUM),
-            PuzzleLevel(10, "City Lights", 6, Difficulty.MEDIUM),
-            PuzzleLevel(11, "Warm Kitchen", 6, Difficulty.MEDIUM),
-
-            PuzzleLevel(12, "Little Library", 7, Difficulty.HARD),
-            PuzzleLevel(13, "Window Garden", 7, Difficulty.HARD),
-            PuzzleLevel(14, "Autumn Walk", 7, Difficulty.HARD),
-            PuzzleLevel(15, "Quiet Balcony", 8, Difficulty.HARD),
-
-            PuzzleLevel(16, "Evening Street", 7, Difficulty.HARD, randomGridSizes = 6..8),
-            PuzzleLevel(17, "Forest Cabin", 7, Difficulty.HARD, randomGridSizes = 6..8),
-            PuzzleLevel(18, "Snowy Village", 7, Difficulty.HARD, randomGridSizes = 6..8),
-            PuzzleLevel(19, "Moonlit Lake", 7, Difficulty.HARD, randomGridSizes = 6..8),
-            PuzzleLevel(20, "Cozy Finale", 8, Difficulty.HARD)
+        private val originalTitles = listOf(
+            "Chipmunk", "Curious Cat", "Celebration Cake", "Lighthouse Coast", "Classic Racer",
+            "Travel Table", "Off-Road Beast", "Emerald Eye", "Red Rock Valley", "City Lights",
+            "Warm Kitchen", "Little Library", "Window Garden", "Autumn Walk", "Quiet Balcony",
+            "Evening Street", "Forest Cabin", "Snowy Village", "Moonlit Lake", "Cozy Finale"
         )
 
-        fun getLevel(levelId: Int): PuzzleLevel? = ALL_LEVELS.find { it.id == levelId }
+        /** Preserve the original first twenty puzzle settings for existing saves. */
+        private fun firstTwentyGrid(levelId: Int): Int = when (levelId) {
+            in 1..5 -> 4
+            in 6..8 -> 5
+            in 9..11 -> 6
+            in 12..14 -> 7
+            15 -> 8
+            in 16..19 -> 7
+            20 -> 8
+            else -> error("Only valid for the first twenty levels")
+        }
+
+        /**
+         * After level 20, difficulty moves through five-level bands of 4..8. This avoids keeping
+         * hundreds of levels permanently at the maximum tile count while still providing variety.
+         */
+        private fun generatedGrid(levelId: Int): Int =
+            4 + (((levelId - 21) / 5) % 5)
+
+        private fun difficultyFor(gridSize: Int): Difficulty = when (gridSize) {
+            in MIN_GRID_SIZE..4 -> Difficulty.EASY
+            5, 6 -> Difficulty.MEDIUM
+            else -> Difficulty.HARD
+        }
+
+        private fun buildLevel(levelId: Int): PuzzleLevel {
+            val gridSize = if (levelId <= 20) firstTwentyGrid(levelId) else generatedGrid(levelId)
+            val title = originalTitles.getOrNull(levelId - 1) ?: "Puzzle ${levelId.toString().padStart(3, '0')}"
+            val randomRange = if (levelId in 16..19) 6..8 else null
+            return PuzzleLevel(
+                id = levelId,
+                title = title,
+                gridSize = gridSize,
+                difficulty = difficultyFor(gridSize),
+                randomGridSizes = randomRange
+            )
+        }
+
+        val ALL_LEVELS: List<PuzzleLevel> by lazy(LazyThreadSafetyMode.PUBLICATION) {
+            (1..MAX_LEVEL_ID).map(::buildLevel)
+        }
+
+        fun getLevel(levelId: Int): PuzzleLevel? =
+            if (levelId in 1..MAX_LEVEL_ID) ALL_LEVELS[levelId - 1] else null
 
         fun requireLevel(levelId: Int): PuzzleLevel =
             getLevel(levelId) ?: ALL_LEVELS.first()
 
-        val maxLevelId: Int get() = ALL_LEVELS.maxOf { it.id }
+        val maxLevelId: Int get() = MAX_LEVEL_ID
     }
 }

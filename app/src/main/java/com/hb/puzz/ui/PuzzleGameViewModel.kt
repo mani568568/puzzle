@@ -136,6 +136,13 @@ class PuzzleGameViewModel(
                     solved = solvedOnLoad, connections = engine.getCorrectConnections().size,
                     speedEligible = session.speedEligible, gridSize = engine.gridSize,
                     baseGridSize = session.baseGridSize)
+                if (loaded.sourceMode == ImageSourceMode.PRELOADED && levelId < PuzzleLevel.maxLevelId) {
+                    // Warm only the next level. The byte-bounded LRU keeps memory usage predictable
+                    // and this IO work never blocks the current puzzle render.
+                    viewModelScope.launch(Dispatchers.IO) {
+                        repository.prefetchBundledLevel(levelId + 1)
+                    }
+                }
                 if (solvedOnLoad) finish() else checkpoint()
             } catch (e: CancellationException) { throw e }
             catch (_: Exception) {
