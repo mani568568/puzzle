@@ -145,9 +145,12 @@ fun PicturePuzzleGameScreen(
     DisposableEffect(feedback) { onDispose { feedback.release() } }
     BackHandler { vm.saveAndLeave(onBack) }
 
-    val creamTop = Color(0xFFFFF9EF)
-    val creamMid = Color(0xFFFFF2DF)
-    val creamBottom = Color(0xFFF5E7D2)
+    // Calm game-play backdrop: cool sky at the top, soft aqua through the
+    // puzzle area, and a warm ivory base near the controls.  Keeping the
+    // saturation low prevents the background from competing with the artwork.
+    val creamTop = Color(0xFFF5FBFF)
+    val creamMid = Color(0xFFEEF8F7)
+    val creamBottom = Color(0xFFFFF7EA)
     val softPanel = Color(0xFFEAFBFA)
     val glassAqua = Color(0xFFD8F5F3)
     val glassAquaDeep = Color(0xFFBFEAE8)
@@ -734,25 +737,29 @@ private fun ResourceNotificationAction(
     onClick: () -> Unit,
     icon: @Composable () -> Unit
 ) {
+    // Keep the resource icons light and clean.  VibrantAction intentionally
+    // casts a deep graphics-layer shadow for normal game buttons; on these
+    // small HUD icons that shadow reads as a black halo, so the resource
+    // controls use their own shadow-free translucent surface instead.
     Box(
         modifier = Modifier
             .width(60.dp)
             .height(54.dp),
         contentAlignment = Alignment.Center
     ) {
-        VibrantAction(
-            onClick = onClick,
+        Box(
             modifier = Modifier
                 .size(48.dp)
+                .clip(CircleShape)
+                .background(Color.White.copy(alpha = 0.72f))
+                .border(1.dp, Color.White.copy(alpha = 0.96f), CircleShape)
+                .clickable(onClick = onClick)
                 .semantics { this.contentDescription = description },
-            shape = CircleShape,
-            brush = Brush.linearGradient(
-                listOf(Color(0x24FFFFFF), Color(0x0BFFFFFF))
-            ),
-            motion = motion
+            contentAlignment = Alignment.Center
         ) {
             icon()
         }
+
         val text = value.coerceAtMost(999999).toString()
         Surface(
             modifier = Modifier
@@ -761,11 +768,14 @@ private fun ResourceNotificationAction(
                 .heightIn(min = 20.dp),
             shape = CircleShape,
             color = badgeColor,
-            shadowElevation = 3.dp,
-            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.85f))
+            shadowElevation = 0.dp,
+            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.95f))
         ) {
             Box(
-                modifier = Modifier.padding(horizontal = if (text.length >= 5) 4.dp else 6.dp, vertical = 2.dp),
+                modifier = Modifier.padding(
+                    horizontal = if (text.length >= 5) 4.dp else 6.dp,
+                    vertical = 2.dp
+                ),
                 contentAlignment = Alignment.Center
             ) {
                 Text(

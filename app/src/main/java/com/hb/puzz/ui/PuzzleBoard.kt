@@ -57,8 +57,9 @@ import kotlin.math.sqrt
 /**
  * Picture puzzle board with rigid connected clusters.
  *
- * Loose tiles render independently. Once tiles become correctly connected they are rendered as
- * one clipped image fragment (one Canvas / one image draw), which removes internal tile seams.
+ * Loose tiles render independently. Correctly connected tiles share one movable group layer,
+ * while every occupied cell is still painted from its exact source-image tile. This keeps irregular
+ * merged shapes fully populated and avoids empty board gaps as groups form or move.
  * Dragging any tile in that fragment moves the whole merged fragment together.
  */
 @Composable
@@ -102,10 +103,18 @@ fun PuzzleBoard(
     BoxWithConstraints(modifier = modifier, contentAlignment = Alignment.Center) {
         val boardWidth = maxWidth
         val boardHeight = maxHeight
-        val tileWidth = boardWidth / gridColumns
-        val tileHeight = boardHeight / gridRows
-        val tileWidthPx = with(density) { tileWidth.toPx() }
-        val tileHeightPx = with(density) { tileHeight.toPx() }
+
+        // IMPORTANT: calculate the grid from the board's final integer pixel bounds instead of
+        // repeatedly dividing Dp values. On densities where a cell is a fractional number of
+        // pixels, independently-rounded tile sizes/offsets can leave visible 1 px cracks once
+        // real artwork is rendered. Every edge below comes from the same integer board size, so
+        // adjacent cells always share the exact same boundary pixel.
+        val boardWidthPxInt = with(density) { boardWidth.roundToPx() }.coerceAtLeast(gridColumns)
+        val boardHeightPxInt = with(density) { boardHeight.roundToPx() }.coerceAtLeast(gridRows)
+        fun gridX(column: Int): Int = (column.coerceIn(0, gridColumns) * boardWidthPxInt) / gridColumns
+        fun gridY(row: Int): Int = (row.coerceIn(0, gridRows) * boardHeightPxInt) / gridRows
+        val tileWidthPx = boardWidthPxInt.toFloat() / gridColumns.toFloat()
+        val tileHeightPx = boardHeightPxInt.toFloat() / gridRows.toFloat()
 
         // The screen owns the outer 1dp frame. This shape matches only the inner artwork
         // footprint, so tile borders and merged outlines can never paint over the frame.
@@ -129,19 +138,21 @@ fun PuzzleBoard(
                         previewPositions.forEach { position ->
                             val row = position / gridColumns
                             val col = position % gridColumns
-                            val left = col * tileWidthPx
-                            val top = row * tileHeightPx
-                            mask.addRect(Rect(left, top, left + tileWidthPx, top + tileHeightPx))
+                            val left = gridX(col).toFloat()
+                            val top = gridY(row).toFloat()
+                            val right = gridX(col + 1).toFloat()
+                            val bottom = gridY(row + 1).toFloat()
+                            mask.addRect(Rect(left, top, right, bottom))
                         }
                         drawPath(mask, dragAccent.copy(alpha = 0.10f))
 
                         previewPositions.forEach { position ->
                             val row = position / gridColumns
                             val col = position % gridColumns
-                            val left = col * tileWidthPx
-                            val top = row * tileHeightPx
-                            val right = left + tileWidthPx
-                            val bottom = top + tileHeightPx
+                            val left = gridX(col).toFloat()
+                            val top = gridY(row).toFloat()
+                            val right = gridX(col + 1).toFloat()
+                            val bottom = gridY(row + 1).toFloat()
                             val stroke = 2.dp.toPx()
                             val color = dragAccent.copy(alpha = 0.88f)
 
@@ -171,8 +182,12 @@ fun PuzzleBoard(
                 key("tile-$tileId") {
                     val row = position / gridColumns
                     val col = position % gridColumns
-                    val targetX = col * tileWidthPx
-                    val targetY = row * tileHeightPx
+                    val targetX = gridX(col).toFloat()
+                    val targetY = gridY(row).toFloat()
+                    val cellWidthPx = gridX(col + 1) - gridX(col)
+                    val cellHeightPx = gridY(row + 1) - gridY(row)
+                    val cellWidth = with(density) { cellWidthPx.toDp() }
+                    val cellHeight = with(density) { cellHeightPx.toDp() }
                     val isDragging = tileId in draggingGroupIds
                     val animatedX by animateFloatAsState(
                         targetValue = targetX,
@@ -197,8 +212,8 @@ fun PuzzleBoard(
 
                     Canvas(
                         modifier = Modifier
-                            .width(tileWidth)
-                            .height(tileHeight)
+                            .width(cellWidth)
+                            .height(cellHeight)
                             .offset {
                                 IntOffset(
                                     (animatedX + visualDrag.x).roundToInt(),
@@ -266,10 +281,12 @@ fun PuzzleBoard(
                     .height(boardHeight)
                     .zIndex(3f)
             ) {
-                val lineWidth = 1.35.dp.toPx()
-                val divider = tileDivider.copy(alpha = 0.98f)
+                // This is a visual stroke only, never layout spacing. Keep it sub-pixel-light
+                // so the artwork remains continuous while loose cells are still readable.
+                val lineWidth = 0.72.dp.toPx()
+                val divider = tileDivider.copy(alpha = 0.58f)
                 for (column in 1 until gridColumns) {
-                    val x = column * tileWidthPx
+                    val x = gridX(column).toFloat()
                     drawLine(
                         color = divider,
                         start = Offset(x, 0f),
@@ -278,7 +295,7 @@ fun PuzzleBoard(
                     )
                 }
                 for (row in 1 until gridRows) {
-                    val y = row * tileHeightPx
+                    val y = gridY(row).toFloat()
                     drawLine(
                         color = divider,
                         start = Offset(0f, y),
@@ -301,10 +318,14 @@ fun PuzzleBoard(
                     val maxCol = groupPositions.maxOf { it % gridColumns }
                     val widthCells = maxCol - minCol + 1
                     val heightCells = maxRow - minRow + 1
-                    val baseX = minCol * tileWidthPx
-                    val baseY = minRow * tileHeightPx
-                    val groupWidth = tileWidth * widthCells
-                    val groupHeight = tileHeight * heightCells
+                    val baseX = gridX(minCol).toFloat()
+                    val baseY = gridY(minRow).toFloat()
+                    val groupRightPx = gridX(maxCol + 1)
+                    val groupBottomPx = gridY(maxRow + 1)
+                    val groupWidthPx = groupRightPx - gridX(minCol)
+                    val groupHeightPx = groupBottomPx - gridY(minRow)
+                    val groupWidth = with(density) { groupWidthPx.toDp() }
+                    val groupHeight = with(density) { groupHeightPx.toDp() }
                     val celebrationPad = 10.dp
                     val celebrationPadPx = with(density) { celebrationPad.toPx() }
                     val canvasWidth = groupWidth + celebrationPad * 2
@@ -326,8 +347,8 @@ fun PuzzleBoard(
                         mergeContours(groupPositions.toSet(), gridColumns, gridRows).map { corners ->
                             Path().apply {
                                 corners.forEachIndexed { index, corner ->
-                                    val x = (corner.x - minCol) * tileWidthPx + celebrationPadPx
-                                    val y = (corner.y - minRow) * tileHeightPx + celebrationPadPx
+                                    val x = (gridX(corner.x) - gridX(minCol)).toFloat() + celebrationPadPx
+                                    val y = (gridY(corner.y) - gridY(minRow)).toFloat() + celebrationPadPx
                                     if (index == 0) moveTo(x, y) else lineTo(x, y)
                                 }
                                 close()
@@ -379,31 +400,19 @@ fun PuzzleBoard(
                                 clip = false
                             }
                     ) {
-                        val drawWidth = size.width - celebrationPadPx * 2f
-                        val drawHeight = size.height - celebrationPadPx * 2f
+                        val drawWidth = groupWidthPx.toFloat()
+                        val drawHeight = groupHeightPx.toFloat()
                         val occupiedPositions = group.map { positions.indexOf(it) }.toSet()
                         val mask = Path()
                         occupiedPositions.forEach { boardPosition ->
-                            val localRow = boardPosition / gridColumns - minRow
-                            val localCol = boardPosition % gridColumns - minCol
-                            val left = celebrationPadPx + localCol * (drawWidth / widthCells)
-                            val top = celebrationPadPx + localRow * (drawHeight / heightCells)
-                            val right = celebrationPadPx + (localCol + 1) * (drawWidth / widthCells)
-                            val bottom = celebrationPadPx + (localRow + 1) * (drawHeight / heightCells)
+                            val boardRow = boardPosition / gridColumns
+                            val boardCol = boardPosition % gridColumns
+                            val left = celebrationPadPx + (gridX(boardCol) - gridX(minCol))
+                            val top = celebrationPadPx + (gridY(boardRow) - gridY(minRow))
+                            val right = celebrationPadPx + (gridX(boardCol + 1) - gridX(minCol))
+                            val bottom = celebrationPadPx + (gridY(boardRow + 1) - gridY(minRow))
                             mask.addRect(Rect(left, top, right, bottom))
                         }
-
-                        // Because all tiles in a connected group preserve their original relative
-                        // orientation, one source rectangle can be drawn across the whole group.
-                        // Drawing once (rather than one bitmap slice per tile) removes inner seams.
-                        val sourceMinRow = group.minOf { it / gridColumns }
-                        val sourceMaxRow = group.maxOf { it / gridColumns }
-                        val sourceMinCol = group.minOf { it % gridColumns }
-                        val sourceMaxCol = group.maxOf { it % gridColumns }
-                        val srcLeft = sourceMinCol * image.width / gridColumns
-                        val srcTop = sourceMinRow * image.height / gridRows
-                        val srcRight = (sourceMaxCol + 1) * image.width / gridColumns
-                        val srcBottom = (sourceMaxRow + 1) * image.height / gridRows
 
                         val lift = mergeLift(mergeProgress.value)
                         if (lift > 0f) {
@@ -415,15 +424,57 @@ fun PuzzleBoard(
                                 }
                             }
                         }
-                        clipPath(mask) {
-                            drawImage(
-                                image = image,
-                                srcOffset = IntOffset(srcLeft, srcTop),
-                                srcSize = IntSize(srcRight - srcLeft, srcBottom - srcTop),
-                                dstOffset = IntOffset(celebrationPadPx.roundToInt(), celebrationPadPx.roundToInt()),
-                                dstSize = IntSize(drawWidth.roundToInt(), drawHeight.roundToInt()),
-                                filterQuality = FilterQuality.High
-                            )
+
+                        /*
+                         * IMPORTANT: render every member of a merged block into its exact occupied
+                         * board cell instead of stretching one large rectangular bitmap crop over
+                         * the group's bounding box.
+                         *
+                         * A merged block can be L/T/step shaped. The previous bounding-rectangle
+                         * renderer worked for simple rectangular clusters, but irregular clusters
+                         * could expose the board surface in cells inside that rectangle while blocks
+                         * were being merged/reflowed. Drawing from the tile permutation itself means
+                         * every occupied cell always receives artwork, regardless of the source
+                         * image dimensions or the group's contour.
+                         *
+                         * Both source and destination boundaries use shared integer edge functions,
+                         * so neighboring pieces use exactly the same pixel edge. No padding, margin,
+                         * or independent floating-point rounding is introduced between tiles.
+                         */
+                        group.forEach { tileId ->
+                            val boardPosition = positions.indexOf(tileId)
+                            if (boardPosition >= 0) {
+                                val boardRow = boardPosition / gridColumns
+                                val boardCol = boardPosition % gridColumns
+
+                                val dstLeft = celebrationPadPx.roundToInt() +
+                                    (gridX(boardCol) - gridX(minCol))
+                                val dstTop = celebrationPadPx.roundToInt() +
+                                    (gridY(boardRow) - gridY(minRow))
+                                val dstRight = celebrationPadPx.roundToInt() +
+                                    (gridX(boardCol + 1) - gridX(minCol))
+                                val dstBottom = celebrationPadPx.roundToInt() +
+                                    (gridY(boardRow + 1) - gridY(minRow))
+
+                                val sourceRow = tileId / gridColumns
+                                val sourceCol = tileId % gridColumns
+                                val srcLeft = sourceCol * image.width / gridColumns
+                                val srcTop = sourceRow * image.height / gridRows
+                                val srcRight = (sourceCol + 1) * image.width / gridColumns
+                                val srcBottom = (sourceRow + 1) * image.height / gridRows
+
+                                drawImage(
+                                    image = image,
+                                    srcOffset = IntOffset(srcLeft, srcTop),
+                                    srcSize = IntSize(srcRight - srcLeft, srcBottom - srcTop),
+                                    dstOffset = IntOffset(dstLeft, dstTop),
+                                    dstSize = IntSize(
+                                        (dstRight - dstLeft).coerceAtLeast(1),
+                                        (dstBottom - dstTop).coerceAtLeast(1)
+                                    ),
+                                    filterQuality = FilterQuality.Low
+                                )
+                            }
                         }
 
                         // A quiet resting border keeps the picture readable. No internal seams.
@@ -574,15 +625,17 @@ fun PuzzleBoard(
                         if (hitBoardPosition >= 0) {
                             val hitBoardRow = hitBoardPosition / gridColumns
                             val hitBoardCol = hitBoardPosition % gridColumns
-                            val localHitRow = hitBoardRow - minRow
-                            val localHitCol = hitBoardCol - minCol
-                            val hitX = animatedX + localHitCol * tileWidthPx + visualDrag.x
-                            val hitY = animatedY + localHitRow * tileHeightPx + visualDrag.y
+                            val hitCellWidthPx = gridX(hitBoardCol + 1) - gridX(hitBoardCol)
+                            val hitCellHeightPx = gridY(hitBoardRow + 1) - gridY(hitBoardRow)
+                            val hitCellWidth = with(density) { hitCellWidthPx.toDp() }
+                            val hitCellHeight = with(density) { hitCellHeightPx.toDp() }
+                            val hitX = animatedX + (gridX(hitBoardCol) - gridX(minCol)) + visualDrag.x
+                            val hitY = animatedY + (gridY(hitBoardRow) - gridY(minRow)) + visualDrag.y
 
                             Canvas(
                                 modifier = Modifier
-                                    .width(tileWidth)
-                            .height(tileHeight)
+                                    .width(hitCellWidth)
+                                    .height(hitCellHeight)
                                     .offset {
                                         IntOffset(hitX.roundToInt(), hitY.roundToInt())
                                     }
@@ -683,7 +736,7 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawSingleTile(
         srcSize = IntSize(srcRight - srcLeft, srcBottom - srcTop),
         dstOffset = IntOffset.Zero,
         dstSize = IntSize(size.width.roundToInt(), size.height.roundToInt()),
-        filterQuality = FilterQuality.High
+        filterQuality = FilterQuality.Low
     )
 }
 
