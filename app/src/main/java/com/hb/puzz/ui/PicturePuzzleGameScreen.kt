@@ -119,7 +119,7 @@ fun PicturePuzzleGameScreen(
         if (ui.celebration.isNotEmpty()) {
             frameMergeGlow.snapTo(0.18f)
             frameMergeGlow.animateTo(1f, tween(180, easing = FastOutSlowInEasing))
-            frameMergeGlow.animateTo(0f, tween(820, easing = LinearOutSlowInEasing))
+            frameMergeGlow.animateTo(0f, tween(1200, easing = LinearOutSlowInEasing))
         }
     }
     LaunchedEffect(finishedTarget) {
@@ -316,7 +316,7 @@ fun PicturePuzzleGameScreen(
                         color = puzzleFrameGlow.copy(alpha = 0.055f + 0.10f * framePulse),
                         border = BorderStroke(
                             4.dp,
-                            puzzleFrameGlow.copy(alpha = 0.12f + 0.30f * framePulse)
+                            puzzleFrameGlow.copy(alpha = 0.18f + 0.55f * framePulse)
                         ),
                         tonalElevation = 0.dp,
                         shadowElevation = 0.dp
@@ -329,23 +329,27 @@ fun PicturePuzzleGameScreen(
                         color = Color.Transparent,
                         border = BorderStroke(
                             2.dp,
-                            Color(0xFFFFE9A3).copy(alpha = 0.32f + 0.36f * framePulse)
+                            Color(0xFFFFE9A3).copy(alpha = 0.35f + 0.50f * framePulse)
                         ),
                         tonalElevation = 0.dp,
                         shadowElevation = 0.dp
                     ) {}
-                    Surface(
+                    // Do not use Surface as the board-content parent here. Material Surface clips
+                    // descendants to its shape, which was trimming merge glow and particles exactly
+                    // where a merged fragment touched the outer puzzle edge. A shaped Box keeps the
+                    // same background/border appearance while allowing celebration drawing to extend
+                    // across and beyond the puzzle frame.
+                    Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(6.dp),
-                        shape = puzzleFrameShape,
-                        color = puzzleFrameColor,
-                        border = BorderStroke(
-                            2.dp,
-                            puzzleFrameBorder.copy(alpha = 0.94f)
-                        ),
-                        tonalElevation = 0.dp,
-                        shadowElevation = 0.dp
+                            .padding(6.dp)
+                            .background(puzzleFrameColor, puzzleFrameShape)
+                            .border(
+                                2.dp,
+                                puzzleFrameBorder.copy(alpha = 0.94f),
+                                puzzleFrameShape
+                            ),
+                        contentAlignment = Alignment.Center
                     ) {
                         Box(
                             Modifier
@@ -356,6 +360,18 @@ fun PicturePuzzleGameScreen(
                             content = boardContent
                         )
                     }
+
+                    // Final frame highlight is intentionally drawn after the board so a merge at
+                    // any outside edge (left/right/top/bottom) lights the visible frame evenly.
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .border(
+                                2.2.dp,
+                                puzzleFrameGlow.copy(alpha = 0.28f + 0.62f * framePulse),
+                                RoundedCornerShape(12.dp)
+                            )
+                    )
                 }
             }
             if (ui.solved) {

@@ -350,7 +350,7 @@ fun PuzzleBoard(
                     val groupHeightPx = groupBottomPx - gridY(minRow)
                     val groupWidth = with(density) { groupWidthPx.toDp() }
                     val groupHeight = with(density) { groupHeightPx.toDp() }
-                    val celebrationPad = 10.dp
+                    val celebrationPad = 44.dp
                     val celebrationPadPx = with(density) { celebrationPad.toPx() }
                     val canvasWidth = groupWidth + celebrationPad * 2
                     val canvasHeight = groupHeight + celebrationPad * 2
@@ -538,18 +538,23 @@ fun PuzzleBoard(
                                     measure.getSegment(0f, distance, trail, true)
                                     drawPath(
                                         trail,
-                                        mergeGlow.copy(alpha = alpha * 0.30f),
+                                        mergeGlow.copy(alpha = alpha * 0.18f),
+                                        style = Stroke(24.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                                    )
+                                    drawPath(
+                                        trail,
+                                        mergeGlow.copy(alpha = alpha * 0.34f),
                                         style = Stroke(16.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
                                     )
                                     drawPath(
                                         trail,
                                         Color(0xFFF6C554).copy(alpha = alpha),
-                                        style = Stroke(4.8.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                                        style = Stroke(5.2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
                                     )
                                     drawPath(
                                         trail,
                                         Color.White.copy(alpha = alpha * 0.94f),
-                                        style = Stroke(1.3.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                                        style = Stroke(1.45.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
                                     )
                                 }
                                 remainingLength -= measure.length
@@ -563,13 +568,18 @@ fun PuzzleBoard(
                                 contourPaths.forEach { contour ->
                                     drawPath(
                                         contour,
-                                        mergeGlow.copy(alpha = lockPulse * 0.30f),
+                                        mergeGlow.copy(alpha = lockPulse * 0.16f),
+                                        style = Stroke(26.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                                    )
+                                    drawPath(
+                                        contour,
+                                        mergeGlow.copy(alpha = lockPulse * 0.34f),
                                         style = Stroke(18.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
                                     )
                                     drawPath(
                                         contour,
-                                        Color(0xFFFFE99C).copy(alpha = lockPulse * 0.92f),
-                                        style = Stroke(3.6.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                                        Color(0xFFFFE99C).copy(alpha = lockPulse * 0.96f),
+                                        style = Stroke(4.2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
                                     )
                                 }
                             }
@@ -579,7 +589,7 @@ fun PuzzleBoard(
                             // more rewarding without making tiny 2-piece joins visually noisy.
                             val dustTimeline = ((progress - 0.10f) / 0.82f).coerceIn(0f, 1f)
                             if (dustTimeline > 0f && perimeterLength > 0f) {
-                                val particleCount = (10 + group.size * 3).coerceIn(16, 58)
+                                val particleCount = (18 + group.size * 5).coerceIn(28, 92)
                                 val center = Offset(size.width / 2f, size.height / 2f)
                                 repeat(particleCount) { index ->
                                     val h1 = magicUnit(index * 97 + group.size * 31 + celebrationVersion * 17)
@@ -603,21 +613,25 @@ fun PuzzleBoard(
                                             val outwardY = dy / length
                                             val tangentX = -outwardY
                                             val tangentY = outwardX
-                                            val travel = (6.dp.toPx() + h1 * 24.dp.toPx()) *
+                                            val outwardTravel = (3.dp.toPx() + h1 * 28.dp.toPx()) *
                                                 smoothFraction(local)
-                                            val sideDrift = (h2 - 0.5f) * 12.dp.toPx() * local
-                                            val px = edgePoint.x + outwardX * travel + tangentX * sideDrift
-                                            val py = edgePoint.y + outwardY * travel + tangentY * sideDrift
-                                            val radius = (0.9.dp.toPx() + h3 * 1.8.dp.toPx())
+                                            // Some dust remains just inside the seam while some crosses
+                                            // outside it, so edge merges do not look one-sided.
+                                            val acrossBorderBias = ((h3 - 0.5f) * 2f) * 7.dp.toPx()
+                                            val sideDrift = (h2 - 0.5f) * 14.dp.toPx() * local
+                                            val px = edgePoint.x + outwardX * (outwardTravel + acrossBorderBias) + tangentX * sideDrift
+                                            val py = edgePoint.y + outwardY * (outwardTravel + acrossBorderBias) + tangentY * sideDrift
+                                            val radius = (1.0.dp.toPx() + h3 * 2.0.dp.toPx())
                                             val gold = if (index % 4 == 0) {
                                                 Color.White
                                             } else {
                                                 Color(0xFFFFD968)
                                             }
 
+                                            // Dust glow sits on both sides of the contour, not only outside.
                                             drawCircle(
-                                                color = gold.copy(alpha = particleAlpha * 0.20f),
-                                                radius = radius * 2.4f,
+                                                color = gold.copy(alpha = particleAlpha * 0.16f),
+                                                radius = radius * 3.0f,
                                                 center = Offset(px, py)
                                             )
                                             drawCircle(
@@ -625,23 +639,28 @@ fun PuzzleBoard(
                                                 radius = radius,
                                                 center = Offset(px, py)
                                             )
+                                            drawCircle(
+                                                color = Color.White.copy(alpha = particleAlpha * 0.85f),
+                                                radius = radius * 0.35f,
+                                                center = Offset(px, py)
+                                            )
 
                                             // A few particles become tiny four-point stars,
                                             // matching the magical sparkle feel in the reference.
                                             if (index % 3 == 0) {
-                                                val arm = radius * (2.2f + h1)
+                                                val arm = radius * (2.4f + h1)
                                                 drawLine(
                                                     color = Color.White.copy(alpha = particleAlpha * 0.92f),
                                                     start = Offset(px - arm, py),
                                                     end = Offset(px + arm, py),
-                                                    strokeWidth = 0.8.dp.toPx(),
+                                                    strokeWidth = 0.9.dp.toPx(),
                                                     cap = StrokeCap.Round
                                                 )
                                                 drawLine(
                                                     color = Color.White.copy(alpha = particleAlpha * 0.92f),
                                                     start = Offset(px, py - arm),
                                                     end = Offset(px, py + arm),
-                                                    strokeWidth = 0.8.dp.toPx(),
+                                                    strokeWidth = 0.9.dp.toPx(),
                                                     cap = StrokeCap.Round
                                                 )
                                             }
