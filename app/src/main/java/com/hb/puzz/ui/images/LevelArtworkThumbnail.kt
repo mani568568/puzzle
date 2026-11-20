@@ -24,12 +24,16 @@ fun LevelArtworkThumbnail(
     levelId: Int,
     modifier: Modifier = Modifier,
     contentDescription: String? = null,
-    alpha: Float = 1f
+    alpha: Float = 1f,
+    frost: ThumbnailFrost? = null
 ) {
     val appContext = LocalContext.current.applicationContext
-    val bitmap by produceState<android.graphics.Bitmap?>(initialValue = null, levelId) {
+    val bitmap by produceState<android.graphics.Bitmap?>(initialValue = null, levelId, frost) {
         value = withContext(Dispatchers.IO) {
-            runCatching { ImageAssets.loadBitmap(appContext, levelId, targetEdgePx = 320) }.getOrNull()
+            runCatching {
+                if (frost == null) ImageAssets.loadBitmap(appContext, levelId, targetEdgePx = 320)
+                else ImageAssets.loadFrostedThumbnail(appContext, levelId, frost)
+            }.getOrNull()
         }
     }
 

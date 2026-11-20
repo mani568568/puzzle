@@ -1,6 +1,7 @@
 package com.hb.puzz.ui
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -40,6 +41,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.hb.puzz.domain.PuzzleLevel
+import com.hb.puzz.ui.images.ThumbnailFrost
 import com.hb.puzz.ui.images.LevelArtworkThumbnail
 
 @Composable
@@ -141,7 +143,22 @@ private fun LevelGalleryCard(
                     levelId = level.id,
                     contentDescription = "Level ${level.id} artwork",
                     modifier = Modifier.fillMaxSize(),
-                    alpha = if (unlocked) 1f else 0.42f
+                    frost = if (unlocked) ThumbnailFrost.LIGHT else ThumbnailFrost.HEAVY
+                )
+                // The glass sits over the artwork. Badges and controls draw at full contrast.
+                Box(
+                    Modifier
+                        .matchParentSize()
+                        .background(
+                            Brush.linearGradient(
+                                0f to Color.White.copy(alpha = 0.48f),
+                                0.38f to Color(0xFFD9F1F4).copy(alpha = 0.20f),
+                                0.42f to Color.White.copy(alpha = 0.28f),
+                                0.62f to Color.White.copy(alpha = 0.07f),
+                                1f to Color(0xFFB7DAEC).copy(alpha = 0.26f)
+                            )
+                        )
+                        .border(1.dp, Color.White.copy(alpha = 0.65f), RoundedCornerShape(18.dp))
                 )
 
                 Surface(

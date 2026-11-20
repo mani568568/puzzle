@@ -24,6 +24,7 @@ data class PicturePuzzleUiState(
     val connections: Int = 0,
     val celebration: Set<Int> = emptySet(),
     val celebrationVersion: Int = 0,
+    val largestMerge: Int = 0,
     val receipt: CompletionReceipt? = null,
     val error: String? = null,
     val saveError: Boolean = false,
@@ -243,13 +244,15 @@ class PuzzleGameViewModel(
         val after = engine.getCorrectConnections()
         val gained = after - before
         val ids = gained.flatMap { listOf(it.firstTileId, it.secondTileId) }.toSet()
-        val celebrating = engine.getConnectedGroups().filter { group -> group.any { it in ids } }.flatten().toSet()
+        val mergedGroups = engine.getConnectedGroups().filter { group -> group.any { it in ids } }
+        val celebrating = mergedGroups.flatten().toSet()
         val solved = engine.isSolved()
         if (solved) clock.pause()
         mutable.value = mutable.value.copy(moves = mutable.value.moves + 1,
             elapsedMillis = clock.elapsedMillis(), boardVersion = mutable.value.boardVersion + 1,
             connections = after.size, solved = solved, running = !solved,
-            celebration = celebrating, celebrationVersion = mutable.value.celebrationVersion + 1)
+            celebration = celebrating,
+            largestMerge = mergedGroups.maxOfOrNull { it.size } ?: 0, celebrationVersion = mutable.value.celebrationVersion + 1)
         celebrationJob?.cancel()
         celebrationJob = viewModelScope.launch {
             delay(MergeMotion.CLEAR_DELAY_MILLIS); mutable.value = mutable.value.copy(celebration = emptySet())
@@ -322,12 +325,8 @@ class PuzzleGameViewModel(
         val after = engine.getCorrectConnections()
         val gained = after - before
         val gainedIds = gained.flatMap { listOf(it.firstTileId, it.secondTileId) }.toSet()
-        val celebrating = if (gainedIds.isEmpty()) emptySet() else {
-            engine.getConnectedGroups()
-                .filter { group -> group.any { it in gainedIds } }
-                .flatten()
-                .toSet()
-        }
+        val mergedGroups = engine.getConnectedGroups().filter { group -> group.any { it in gainedIds } }
+        val celebrating = mergedGroups.flatten().toSet()
         val solved = engine.isSolved()
         if (solved) clock.pause()
 
@@ -339,6 +338,7 @@ class PuzzleGameViewModel(
             solved = solved,
             running = !solved,
             celebration = celebrating,
+            largestMerge = mergedGroups.maxOfOrNull { it.size } ?: 0,
             celebrationVersion = mutable.value.celebrationVersion + 1
         )
 

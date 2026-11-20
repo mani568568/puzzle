@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -25,15 +24,16 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathMeasure
 import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.Color
@@ -93,8 +93,6 @@ fun PuzzleBoard(
     val groupedTileIds = remember(connectedGroups) { connectedGroups.flatten().toSet() }
 
     val surface = Color(0xFFFFF6E8)
-    val gridBorder = Color(0xFFD5B65A)
-    val tileDivider = Color(0xFFFFFBF4)
     val dragAccent = Color(0xFF67C9D7)
     val mergeGlow = Color(0xFFFFD86B)
     val density = LocalDensity.current
@@ -127,14 +125,11 @@ fun PuzzleBoard(
         val tileWidthPx = boardWidthPxInt.toFloat() / gridColumns.toFloat()
         val tileHeightPx = boardHeightPxInt.toFloat() / gridRows.toFloat()
 
-        // The screen owns the outer 1dp frame. This shape matches only the inner artwork
-        // footprint, so tile borders and merged outlines can never paint over the frame.
-        val boardShape = RoundedCornerShape(6.dp)
         Box(
             modifier = Modifier
                 .width(boardWidth)
                 .height(boardHeight)
-                .background(surface, boardShape)
+                .background(surface)
         ) {
             // A single shared preview footprint keeps merged pieces looking like one object.
             val anchor = draggingAnchorTileId
@@ -292,40 +287,10 @@ fun PuzzleBoard(
                             }
                     ) {
                         drawSingleTile(image, tileId, gridColumns, gridRows)
+                        drawTileBevel(
+                            Rect(0f, 0f, size.width, size.height), position, gridColumns, gridRows
+                        )
                     }
-                }
-            }
-
-            // Draw one shared white grid after the loose tiles. Using a single overlay avoids
-            // doubled/misaligned borders from neighboring tiles. Correctly merged groups are
-            // rendered after this overlay, so their internal white seams disappear naturally.
-            Canvas(
-                modifier = Modifier
-                    .width(boardWidth)
-                    .height(boardHeight)
-                    .zIndex(3f)
-            ) {
-                // This is a visual stroke only, never layout spacing. Keep it sub-pixel-light
-                // so the artwork remains continuous while loose cells are still readable.
-                val lineWidth = 0.72.dp.toPx()
-                val divider = tileDivider.copy(alpha = 0.58f)
-                for (column in 1 until gridColumns) {
-                    val x = gridX(column).toFloat()
-                    drawLine(
-                        color = divider,
-                        start = Offset(x, 0f),
-                        end = Offset(x, size.height),
-                        strokeWidth = lineWidth
-                    )
-                }
-                for (row in 1 until gridRows) {
-                    val y = gridY(row).toFloat()
-                    drawLine(
-                        color = divider,
-                        start = Offset(0f, y),
-                        end = Offset(size.width, y),
-                        strokeWidth = lineWidth
-                    )
                 }
             }
 
@@ -336,6 +301,7 @@ fun PuzzleBoard(
                     val groupPositions = group.mapNotNull { tileId ->
                         positions.indexOf(tileId).takeIf { it >= 0 }
                     }
+                    val occupiedPositions = remember(groupPositions) { groupPositions.toSet() }
                     val minRow = groupPositions.minOf { it / gridColumns }
                     val maxRow = groupPositions.maxOf { it / gridColumns }
                     val minCol = groupPositions.minOf { it % gridColumns }
@@ -368,7 +334,7 @@ fun PuzzleBoard(
                     }
                     // Build continuous contours only when geometry changes, never per frame.
                     val contourPaths = remember(groupPositions, tileWidthPx, tileHeightPx) {
-                        mergeContours(groupPositions.toSet(), gridColumns, gridRows).map { corners ->
+                        mergeContours(occupiedPositions, gridColumns, gridRows).map { corners ->
                             Path().apply {
                                 corners.forEachIndexed { index, corner ->
                                     val x = (gridX(corner.x) - gridX(minCol)).toFloat() + celebrationPadPx
@@ -426,7 +392,6 @@ fun PuzzleBoard(
                     ) {
                         val drawWidth = groupWidthPx.toFloat()
                         val drawHeight = groupHeightPx.toFloat()
-                        val occupiedPositions = group.map { positions.indexOf(it) }.toSet()
                         val mask = Path()
                         occupiedPositions.forEach { boardPosition ->
                             val boardRow = boardPosition / gridColumns
@@ -498,27 +463,17 @@ fun PuzzleBoard(
                                     ),
                                     filterQuality = FilterQuality.Low
                                 )
+                                drawTileBevel(
+                                    Rect(dstLeft.toFloat(), dstTop.toFloat(), dstRight.toFloat(), dstBottom.toFloat()),
+                                    boardPosition, gridColumns, gridRows, occupiedPositions
+                                )
                             }
                         }
 
-                        // A quiet resting border keeps the picture readable. No internal seams.
-                        contourPaths.forEach { contour ->
-                            if (!isDragging) {
-                                drawPath(
-                                    contour,
-                                    gridBorder.copy(alpha = 0.16f),
-                                    style = Stroke(5.5.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
-                                )
+                        if (isDragging) {
+                            contourPaths.forEach { contour ->
+                                drawPath(contour, dragAccent, style = Stroke(2.2.dp.toPx(), join = StrokeJoin.Round))
                             }
-                            drawPath(
-                                contour,
-                                if (isDragging) dragAccent else gridBorder.copy(alpha = 0.88f),
-                                style = Stroke(
-                                    if (isDragging) 2.2.dp.toPx() else 1.45.dp.toPx(),
-                                    cap = StrokeCap.Round,
-                                    join = StrokeJoin.Round
-                                )
-                            )
                         }
 
                         if (mergeProgress.value < 1f) {
@@ -773,7 +728,37 @@ private fun calculateHoverPosition(
     return candidate.takeIf { engine.canMoveGroupTo(anchorTileId, it) }
 }
 
-private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawSingleTile(
+// Paint each side inside its tile. The two sides meet exactly at the shared pixel boundary
+// and move with the artwork during a drag. Interior edges of a connected group stay clear.
+private fun DrawScope.drawTileBevel(
+    bounds: Rect,
+    position: Int,
+    columns: Int,
+    rows: Int,
+    joinedPositions: Set<Int> = emptySet()
+) {
+    val col = position % columns
+    val row = position / columns
+    val top = row > 0 && position - columns !in joinedPositions
+    val left = col > 0 && position - 1 !in joinedPositions
+    val bottom = row + 1 < rows && position + columns !in joinedPositions
+    val right = col + 1 < columns && position + 1 !in joinedPositions
+    val light = Color(0x66FFF8ED)
+    val dark = Color(0x99192733)
+    val highlight = 0.5.dp.toPx()
+    val shadow = 0.8.dp.toPx()
+    val x = bounds.left
+    val y = bounds.top
+    if (top) drawRect(light, Offset(x, y), Size(bounds.width, highlight))
+    if (bottom) drawRect(dark, Offset(x, bounds.bottom - shadow), Size(bounds.width, shadow))
+    val sideTop = if (top) y + highlight else y
+    val sideEnd = if (bottom) bounds.bottom - shadow else bounds.bottom
+    val sideHeight = (sideEnd - sideTop).coerceAtLeast(0f)
+    if (left) drawRect(light, Offset(x, sideTop), Size(highlight, sideHeight))
+    if (right) drawRect(dark, Offset(bounds.right - shadow, sideTop), Size(shadow, sideHeight))
+}
+
+private fun DrawScope.drawSingleTile(
     image: ImageBitmap,
     tileId: Int,
     gridColumns: Int,

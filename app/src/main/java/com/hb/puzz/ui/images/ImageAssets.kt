@@ -2,9 +2,12 @@ package com.hb.puzz.ui.images
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.Color
 import android.graphics.BitmapFactory
 import android.util.LruCache
 import kotlin.math.roundToInt
+
+enum class ThumbnailFrost(val sampleEdge: Int) { LIGHT(26), HEAVY(13) }
 
 /**
  * Memory-efficient loader for drawable-nodpi/level_001.jpeg ... level_999.jpeg.
@@ -109,8 +112,46 @@ object ImageAssets {
         return square
     }
 
+    /** Smooth a small gallery-only copy once, so scrolling needs no live blur layer. */
+    fun loadFrostedThumbnail(context: Context, levelId: Int, frost: ThumbnailFrost): Bitmap {
+        val key = "$levelId@frost-${frost.name}"
+        memoryCache.get(key)?.let { return it }
+        val source = loadBitmap(context, levelId, MIN_DECODE_EDGE)
+        val edge = frost.sampleEdge
+        val small = Bitmap.createScaledBitmap(source, edge, edge, true)
+        val pixels = IntArray(edge * edge)
+        small.getPixels(pixels, 0, edge, 0, 0, edge, edge)
+        if (small !== source) small.recycle()
+
+        // A normalized binomial kernel softens detail evenly, including at the crop edges.
+        val weights = intArrayOf(1, 4, 6, 4, 1)
+        val blurred = IntArray(pixels.size)
+        for (y in 0 until edge) {
+            for (x in 0 until edge) {
+                var red = 0
+                var green = 0
+                var blue = 0
+                for (dy in -2..2) {
+                    val row = (y + dy).coerceIn(0, edge - 1) * edge
+                    for (dx in -2..2) {
+                        val color = pixels[row + (x + dx).coerceIn(0, edge - 1)]
+                        val weight = weights[dy + 2] * weights[dx + 2]
+                        red += Color.red(color) * weight
+                        green += Color.green(color) * weight
+                        blue += Color.blue(color) * weight
+                    }
+                }
+                blurred[y * edge + x] = Color.rgb((red + 128) / 256, (green + 128) / 256, (blue + 128) / 256)
+            }
+        }
+        return Bitmap.createBitmap(blurred, edge, edge, Bitmap.Config.ARGB_8888).also {
+            memoryCache.put(key, it)
+        }
+    }
+
     fun evictLevel(levelId: Int) {
         synchronized(memoryCache) {
+            ThumbnailFrost.values().forEach { memoryCache.remove("$levelId@frost-${it.name}") }
             listOf(320, 768, 1280, 2048).forEach { memoryCache.remove("$levelId@$it") }
         }
     }

@@ -48,6 +48,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.res.stringResource
+import com.hb.puzz.R
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -240,7 +242,7 @@ private fun HomeBackgroundLandscapePuzzle() {
 private fun SnapFrameLogo() {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
-            text = "SnapFrame",
+            text = stringResource(R.string.app_name),
             color = Color(0xFF26435B),
             fontSize = 44.sp,
             lineHeight = 48.sp,

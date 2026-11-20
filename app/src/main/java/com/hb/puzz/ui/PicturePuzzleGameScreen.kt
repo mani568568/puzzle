@@ -35,6 +35,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -70,6 +71,9 @@ import com.hb.puzz.data.images.PuzzleImageRepository
 import com.hb.puzz.domain.CoinRewards
 import com.hb.puzz.domain.PuzzleLevel
 import com.hb.puzz.ui.feedback.PuzzleFeedbackPlayer
+
+private val PuzzleFrameColor = Color(0xFF24323C)
+private val PuzzleFrameWidth = 2.dp
 
 @Composable
 fun PicturePuzzleGameScreen(
@@ -114,14 +118,6 @@ fun PicturePuzzleGameScreen(
     )
     val finishedReady = finishedTarget && finishedReveal >= 0.92f
     val celebrationBurst = remember(levelId) { Animatable(0f) }
-    val frameMergeGlow = remember(levelId) { Animatable(0f) }
-    LaunchedEffect(ui.celebrationVersion) {
-        if (ui.celebration.isNotEmpty()) {
-            frameMergeGlow.snapTo(0.18f)
-            frameMergeGlow.animateTo(1f, tween(180, easing = FastOutSlowInEasing))
-            frameMergeGlow.animateTo(0f, tween(1200, easing = LinearOutSlowInEasing))
-        }
-    }
     LaunchedEffect(finishedTarget) {
         if (finishedTarget) {
             celebrationBurst.snapTo(0f)
@@ -148,6 +144,34 @@ fun PicturePuzzleGameScreen(
         onDispose {
             lifecycle.removeObserver(observer)
             vm.pauseForLifecycle()
+        }
+    }
+    DisposableEffect(lifecycle, feedback, soundEnabled, ui.running, ui.solved, levelId) {
+        fun updateAudio(resumed: Boolean) {
+            val audible = soundEnabled && resumed && (ui.running || ui.solved)
+            feedback.updatePlayback(levelId, audible, audible && ui.running)
+        }
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> updateAudio(true)
+                Lifecycle.Event.ON_PAUSE, Lifecycle.Event.ON_STOP -> updateAudio(false)
+                else -> Unit
+            }
+        }
+        lifecycle.addObserver(observer)
+        updateAudio(lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED))
+        onDispose { lifecycle.removeObserver(observer) }
+    }
+    fun playMoveFeedback(result: Int) {
+        when (result) {
+            1 -> {
+                if (soundEnabled) feedback.playMerge(vm.state.value.largestMerge)
+                if (hapticsEnabled) feedback.buzzForConnection()
+            }
+            2 -> {
+                if (soundEnabled) feedback.playSolvedSound()
+                if (hapticsEnabled) feedback.buzzForSolved()
+            }
         }
     }
     DisposableEffect(feedback) { onDispose { feedback.release() } }
@@ -222,14 +246,6 @@ fun PicturePuzzleGameScreen(
             // the puzzle uses substantially more vertical screen space down toward the controls.
             val puzzleAspectRatio = (vm.engine.gridColumns.toFloat() / vm.engine.gridRows.toFloat())
                 .coerceIn(0.54f, 0.64f)
-            // Keep the live puzzle framed while playing, but remove that outer board frame
-            // completely during the magical finished transformation so no extra oval/outline
-            // remains behind the final finished card.
-            val puzzleFrameShape = RoundedCornerShape(9.dp)
-            val puzzleContentShape = RoundedCornerShape(7.dp)
-            val puzzleFrameColor = Color(0xFFFFF8E9)
-            val puzzleFrameBorder = Color(0xFFD6AD43)
-            val puzzleFrameGlow = Color(0xFFFFD86B)
             val boardContent: @Composable BoxScope.() -> Unit = {
                 when {
                     ui.loading -> CircularProgressIndicator()
@@ -260,13 +276,10 @@ fun PicturePuzzleGameScreen(
                                 if (ui.solved) emptySet() else ui.celebration,
                                 ui.celebrationVersion,
                                 onGroupDropped = { anchor, target ->
-                                    when (vm.drop(anchor, target)) {
-                                        1 -> { if (soundEnabled) feedback.playConnectionSound(); if (hapticsEnabled) feedback.buzzForConnection() }
-                                        2 -> { if (soundEnabled) feedback.playSolvedSound(); if (hapticsEnabled) feedback.buzzForSolved() }
-                                    }
+                                    playMoveFeedback(vm.drop(anchor, target))
                                 },
                                 motionDurationMs = blockMotion.durationMillis,
-                                modifier = Modifier.fillMaxSize(),
+                                modifier = Modifier.fillMaxSize().border(PuzzleFrameWidth, PuzzleFrameColor, RectangleShape),
                                 inputEnabled = !ui.solved && (!ui.started || ui.running)
                             )
                             if (!ui.solved) {
@@ -291,89 +304,13 @@ fun PicturePuzzleGameScreen(
                 }
             }
 
-            if (ui.solved) {
-                Box(
-                    Modifier
-                        .fillMaxWidth(0.80f)
-                        .aspectRatio(puzzleAspectRatio),
-                    contentAlignment = Alignment.Center,
-                    content = boardContent
-                )
-            } else {
-                // Layered champagne-gold frame. The low-alpha outer rings create a soft glow
-                // without a black Material shadow. Each successful merge briefly strengthens the
-                // halo so merges that touch the board edge still visibly light up the frame.
-                val framePulse = frameMergeGlow.value.coerceIn(0f, 1f)
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth(0.945f)
-                        .aspectRatio(puzzleAspectRatio),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Surface(
-                        modifier = Modifier.fillMaxSize(),
-                        shape = RoundedCornerShape(12.dp),
-                        color = puzzleFrameGlow.copy(alpha = 0.055f + 0.10f * framePulse),
-                        border = BorderStroke(
-                            4.dp,
-                            puzzleFrameGlow.copy(alpha = 0.18f + 0.55f * framePulse)
-                        ),
-                        tonalElevation = 0.dp,
-                        shadowElevation = 0.dp
-                    ) {}
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(3.dp),
-                        shape = RoundedCornerShape(10.dp),
-                        color = Color.Transparent,
-                        border = BorderStroke(
-                            2.dp,
-                            Color(0xFFFFE9A3).copy(alpha = 0.35f + 0.50f * framePulse)
-                        ),
-                        tonalElevation = 0.dp,
-                        shadowElevation = 0.dp
-                    ) {}
-                    // Do not use Surface as the board-content parent here. Material Surface clips
-                    // descendants to its shape, which was trimming merge glow and particles exactly
-                    // where a merged fragment touched the outer puzzle edge. A shaped Box keeps the
-                    // same background/border appearance while allowing celebration drawing to extend
-                    // across and beyond the puzzle frame.
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(6.dp)
-                            .background(puzzleFrameColor, puzzleFrameShape)
-                            .border(
-                                2.dp,
-                                puzzleFrameBorder.copy(alpha = 0.94f),
-                                puzzleFrameShape
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Box(
-                            Modifier
-                                .padding(1.dp)
-                                .fillMaxSize()
-                                .background(Color(0xFFFFF6E8), puzzleContentShape),
-                            contentAlignment = Alignment.Center,
-                            content = boardContent
-                        )
-                    }
-
-                    // Final frame highlight is intentionally drawn after the board so a merge at
-                    // any outside edge (left/right/top/bottom) lights the visible frame evenly.
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .border(
-                                2.2.dp,
-                                puzzleFrameGlow.copy(alpha = 0.28f + 0.62f * framePulse),
-                                RoundedCornerShape(12.dp)
-                            )
-                    )
-                }
-            }
+            Box(
+                Modifier
+                    .fillMaxWidth(if (ui.solved) 0.80f else 0.945f)
+                    .aspectRatio(puzzleAspectRatio),
+                contentAlignment = Alignment.Center,
+                content = boardContent
+            )
             if (ui.solved) {
                 Surface(
                     Modifier.fillMaxWidth(0.80f),
@@ -541,18 +478,7 @@ fun PicturePuzzleGameScreen(
                             enabled = hints > 0 && !ui.loading && ui.image != null && (!ui.started || ui.running),
                             badgeCount = hints,
                             onClick = {
-                                vm.hintStep { result ->
-                                    when (result) {
-                                        1 -> {
-                                            if (soundEnabled) feedback.playConnectionSound()
-                                            if (hapticsEnabled) feedback.buzzForConnection()
-                                        }
-                                        2 -> {
-                                            if (soundEnabled) feedback.playSolvedSound()
-                                            if (hapticsEnabled) feedback.buzzForSolved()
-                                        }
-                                    }
-                                }
+                                vm.hintStep { result -> playMoveFeedback(result) }
                             },
                             modifier = Modifier.weight(1f),
                             brush = Brush.linearGradient(listOf(Color(0xFFFFB739), Color(0xFFFF5F93))),
@@ -1056,20 +982,7 @@ private fun FinishedImageTransformation(
     modifier: Modifier = Modifier
 ) {
     val p = progress.coerceIn(0f, 1f)
-    val frameShape = RoundedCornerShape(14.dp)
-    val imageShape = RoundedCornerShape(10.dp)
     val labelShape = RoundedCornerShape(10.dp)
-    val borderBrush = Brush.linearGradient(
-        colors = listOf(
-            Color(0xFFFF6B6B),
-            Color(0xFFFFC94A),
-            Color(0xFF44D1C4),
-            Color(0xFF6D8CFF),
-            Color(0xFFC77DFF),
-            Color(0xFFFF6B6B)
-        )
-    )
-
     Box(modifier, contentAlignment = Alignment.Center) {
         Box(
             modifier = Modifier
@@ -1085,8 +998,6 @@ private fun FinishedImageTransformation(
                     scaleY = overshoot
                     translationY = (1f - p) * 18f
                 }
-                .border(width = 3.dp, brush = borderBrush, shape = frameShape)
-                .clip(frameShape)
                 .background(Color(0xFFFFFBF5))
         ) {
             Column(
@@ -1099,14 +1010,13 @@ private fun FinishedImageTransformation(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
-                        .clip(imageShape)
                         .background(Color.White),
                     contentAlignment = Alignment.Center
                 ) {
                     Image(
                         bitmap = image,
                         contentDescription = "Finished picture",
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier.fillMaxSize().border(PuzzleFrameWidth, PuzzleFrameColor, RectangleShape),
                         contentScale = ContentScale.Crop
                     )
                 }
