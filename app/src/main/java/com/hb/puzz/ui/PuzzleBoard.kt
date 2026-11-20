@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -287,7 +288,7 @@ fun PuzzleBoard(
                             }
                     ) {
                         drawSingleTile(image, tileId, gridColumns, gridRows)
-                        drawTileBevel(
+                        drawTileDivider(
                             Rect(0f, 0f, size.width, size.height), position, gridColumns, gridRows
                         )
                     }
@@ -316,8 +317,9 @@ fun PuzzleBoard(
                     val groupHeightPx = groupBottomPx - gridY(minRow)
                     val groupWidth = with(density) { groupWidthPx.toDp() }
                     val groupHeight = with(density) { groupHeightPx.toDp() }
-                    val celebrationPad = 44.dp
-                    val celebrationPadPx = with(density) { celebrationPad.toPx() }
+                    // Use the same whole-pixel inset when placing the canvas and its artwork.
+                    val celebrationPadPx = with(density) { 44.dp.roundToPx() }.toFloat()
+                    val celebrationPad = with(density) { celebrationPadPx.toDp() }
                     val canvasWidth = groupWidth + celebrationPad * 2
                     val canvasHeight = groupHeight + celebrationPad * 2
                     val isDragging = group.any { it in draggingGroupIds }
@@ -371,14 +373,15 @@ fun PuzzleBoard(
 
                     Canvas(
                         modifier = Modifier
-                            .size(canvasWidth, canvasHeight)
+                            .zIndex(if (isDragging) 30f else if (mergeProgress.value < 1f) 16f else 5f)
                             .offset {
                                 IntOffset(
                                     (animatedX + visualDrag.x - celebrationPadPx).roundToInt(),
                                     (animatedY + visualDrag.y - celebrationPadPx).roundToInt()
                                 )
                             }
-                            .zIndex(if (isDragging) 30f else if (mergeProgress.value < 1f) 16f else 5f)
+                            .wrapContentSize(Alignment.TopStart, unbounded = true)
+                            .size(canvasWidth, canvasHeight)
                             .graphicsLayer {
                                 val lift = mergeLift(mergeProgress.value)
                                 val scale = groupScale * (1f + lift * 0.012f)
@@ -463,7 +466,7 @@ fun PuzzleBoard(
                                     ),
                                     filterQuality = FilterQuality.Low
                                 )
-                                drawTileBevel(
+                                drawTileDivider(
                                     Rect(dstLeft.toFloat(), dstTop.toFloat(), dstRight.toFloat(), dstBottom.toFloat()),
                                     boardPosition, gridColumns, gridRows, occupiedPositions
                                 )
@@ -728,34 +731,25 @@ private fun calculateHoverPosition(
     return candidate.takeIf { engine.canMoveGroupTo(anchorTileId, it) }
 }
 
-// Paint each side inside its tile. The two sides meet exactly at the shared pixel boundary
-// and move with the artwork during a drag. Interior edges of a connected group stay clear.
-private fun DrawScope.drawTileBevel(
+// Each shared edge has one owner: the cell above it or to its left.
+private fun DrawScope.drawTileDivider(
     bounds: Rect,
     position: Int,
     columns: Int,
     rows: Int,
     joinedPositions: Set<Int> = emptySet()
 ) {
-    val col = position % columns
-    val row = position / columns
-    val top = row > 0 && position - columns !in joinedPositions
-    val left = col > 0 && position - 1 !in joinedPositions
-    val bottom = row + 1 < rows && position + columns !in joinedPositions
-    val right = col + 1 < columns && position + 1 !in joinedPositions
-    val light = Color(0x66FFF8ED)
-    val dark = Color(0x99192733)
-    val highlight = 0.5.dp.toPx()
-    val shadow = 0.8.dp.toPx()
-    val x = bounds.left
-    val y = bounds.top
-    if (top) drawRect(light, Offset(x, y), Size(bounds.width, highlight))
-    if (bottom) drawRect(dark, Offset(x, bounds.bottom - shadow), Size(bounds.width, shadow))
-    val sideTop = if (top) y + highlight else y
-    val sideEnd = if (bottom) bounds.bottom - shadow else bounds.bottom
-    val sideHeight = (sideEnd - sideTop).coerceAtLeast(0f)
-    if (left) drawRect(light, Offset(x, sideTop), Size(highlight, sideHeight))
-    if (right) drawRect(dark, Offset(bounds.right - shadow, sideTop), Size(shadow, sideHeight))
+    val bottom = position / columns + 1 < rows && position + columns !in joinedPositions
+    val right = position % columns + 1 < columns && position + 1 !in joinedPositions
+    val ink = Color(0x66392E29)
+    val thickness = 0.7.dp.roundToPx().coerceAtLeast(1).toFloat()
+    if (bottom) {
+        drawRect(ink, Offset(bounds.left, bounds.bottom - thickness), Size(bounds.width, thickness))
+    }
+    if (right) {
+        val height = if (bottom) bounds.height - thickness else bounds.height
+        drawRect(ink, Offset(bounds.right - thickness, bounds.top), Size(thickness, height.coerceAtLeast(0f)))
+    }
 }
 
 private fun DrawScope.drawSingleTile(

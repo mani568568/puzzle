@@ -72,7 +72,7 @@ import com.hb.puzz.domain.CoinRewards
 import com.hb.puzz.domain.PuzzleLevel
 import com.hb.puzz.ui.feedback.PuzzleFeedbackPlayer
 
-private val PuzzleFrameColor = Color(0xFF24323C)
+private val PuzzleFrameColor = Color(0xFFFFE9CB)
 private val PuzzleFrameWidth = 2.dp
 
 @Composable
@@ -269,19 +269,23 @@ fun PicturePuzzleGameScreen(
                                     scaleY = 1f - (0.018f * settle)
                                 }
                         ) {
-                            PuzzleBoard(
-                                vm.engine,
-                                ui.boardVersion,
-                                ui.image!!.bitmap.asImageBitmap(),
-                                if (ui.solved) emptySet() else ui.celebration,
-                                ui.celebrationVersion,
-                                onGroupDropped = { anchor, target ->
-                                    playMoveFeedback(vm.drop(anchor, target))
-                                },
-                                motionDurationMs = blockMotion.durationMillis,
-                                modifier = Modifier.fillMaxSize().border(PuzzleFrameWidth, PuzzleFrameColor, RectangleShape),
-                                inputEnabled = !ui.solved && (!ui.started || ui.running)
-                            )
+                            // Grid Shift replaces the engine. Start the new layout at its own cell
+                            // positions while keeping move animations within the same puzzle.
+                            key(vm.engine) {
+                                PuzzleBoard(
+                                    vm.engine,
+                                    ui.boardVersion,
+                                    ui.image!!.bitmap.asImageBitmap(),
+                                    if (ui.solved) emptySet() else ui.celebration,
+                                    ui.celebrationVersion,
+                                    onGroupDropped = { anchor, target ->
+                                        playMoveFeedback(vm.drop(anchor, target))
+                                    },
+                                    motionDurationMs = blockMotion.durationMillis,
+                                    modifier = Modifier.fillMaxSize().border(PuzzleFrameWidth, PuzzleFrameColor, RectangleShape),
+                                    inputEnabled = !ui.solved && (!ui.started || ui.running)
+                                )
+                            }
                             if (!ui.solved) {
                                 MergePraiseOverlay(
                                     mergeSize = ui.celebration.size,
