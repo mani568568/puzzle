@@ -97,7 +97,7 @@ fun HomeScreen(
     currentGridDescription: String,
     journeyComplete: Boolean,
     onContinue: () -> Unit,
-    onStartJourney: () -> Unit,
+    onNewGame: () -> Unit,
     onJourneyHistory: () -> Unit,
     onHowToPlay: () -> Unit,
     onSettings: () -> Unit,
@@ -167,9 +167,9 @@ fun HomeScreen(
             PremiumPlayLevelCallToAction(
                 currentChapter = currentChapter,
                 title = currentChapterTitle,
-                continueEnabled = hasSavedGame,
+                hasSavedGame = hasSavedGame,
                 onContinue = onContinue,
-                onNewGame = onStartJourney
+                onNewGame = onNewGame
             )
 
             Spacer(Modifier.weight(1f))
@@ -262,7 +262,7 @@ private fun SnapFrameLogo() {
 private fun PremiumPlayLevelCallToAction(
     currentChapter: Int,
     title: String,
-    continueEnabled: Boolean,
+    hasSavedGame: Boolean,
     onContinue: () -> Unit,
     onNewGame: () -> Unit
 ) {
@@ -288,7 +288,7 @@ private fun PremiumPlayLevelCallToAction(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(318.dp),
+            .height(if (hasSavedGame) 318.dp else 252.dp),
         contentAlignment = Alignment.TopCenter
     ) {
         Surface(
@@ -349,8 +349,7 @@ private fun PremiumPlayLevelCallToAction(
         }
 
         VibrantAction(
-            onClick = onContinue,
-            enabled = continueEnabled,
+            onClick = if (hasSavedGame) onContinue else onNewGame,
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .offset(y = 184.dp)
@@ -362,11 +361,7 @@ private fun PremiumPlayLevelCallToAction(
                 .width(172.dp)
                 .height(58.dp),
             shape = RoundedCornerShape(24.dp),
-            brush = if (continueEnabled) {
-                Brush.linearGradient(listOf(Color(0xFFFFA860), Color(0xFFFF7C79), Color(0xFFFF5EA2)))
-            } else {
-                Brush.linearGradient(listOf(Color(0xFFD9DCE4), Color(0xFFC8CED8)))
-            },
+            brush = Brush.linearGradient(listOf(Color(0xFFFFA860), Color(0xFFFF7C79), Color(0xFFFF5EA2))),
             contentColor = Color.White,
             motion = ActionMotion.BOUNCE_UP
         ) {
@@ -383,7 +378,7 @@ private fun PremiumPlayLevelCallToAction(
                 )
                 Spacer(Modifier.width(6.dp))
                 Text(
-                    text = "CONTINUE",
+                    text = if (hasSavedGame) "CONTINUE" else "NEW GAME",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Black,
                     color = Color.White,
@@ -392,29 +387,31 @@ private fun PremiumPlayLevelCallToAction(
             }
         }
 
-        VibrantAction(
-            onClick = onNewGame,
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .offset(y = 252.dp)
-                .graphicsLayer {
-                    scaleX = playScale
-                    scaleY = playScale
-                    alpha = cardAlpha
-                }
-                .width(154.dp)
-                .height(48.dp),
-            shape = RoundedCornerShape(20.dp),
-            brush = Brush.horizontalGradient(listOf(Color(0xFFE8F7FF), Color(0xFFF1EBFF))),
-            contentColor = Color(0xFF35516A),
-            motion = ActionMotion.BOUNCE_UP
-        ) {
-            Text(
-                text = "NEW GAME",
-                color = Color(0xFF35516A),
-                fontWeight = FontWeight.Black,
-                letterSpacing = 0.9.sp
-            )
+        if (hasSavedGame) {
+            VibrantAction(
+                onClick = onNewGame,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .offset(y = 252.dp)
+                    .graphicsLayer {
+                        scaleX = playScale
+                        scaleY = playScale
+                        alpha = cardAlpha
+                    }
+                    .width(154.dp)
+                    .height(48.dp),
+                shape = RoundedCornerShape(20.dp),
+                brush = Brush.horizontalGradient(listOf(Color(0xFFE8F7FF), Color(0xFFF1EBFF))),
+                contentColor = Color(0xFF35516A),
+                motion = ActionMotion.BOUNCE_UP
+            ) {
+                Text(
+                    text = "NEW GAME",
+                    color = Color(0xFF35516A),
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = 0.9.sp
+                )
+            }
         }
     }
 
@@ -785,10 +782,10 @@ private fun ScreenHeader(title: String, onBack: () -> Unit) {
 @Composable
 private fun HomeLightPreview() {
     com.hb.puzz.ui.theme.CozyBlocksTheme(darkTheme = false) {
-        HomeScreen(crystalBalance = 2, coinBalance = 640, completedCount = 8, hasSavedGame = true,
-            currentChapter = 9, currentChapterTitle = "Red Rock Valley",
+        HomeScreen(crystalBalance = 2, coinBalance = 0, completedCount = 0, hasSavedGame = false,
+            currentChapter = 1, currentChapterTitle = "Adventure 1",
             currentDifficulty = "Medium · Focus Flow", currentGridDescription = "6×7 Grid",
-            journeyComplete = false, onContinue = {}, onStartJourney = {}, onJourneyHistory = {}, onHowToPlay = {}, onSettings = {})
+            journeyComplete = false, onContinue = {}, onNewGame = {}, onJourneyHistory = {}, onHowToPlay = {}, onSettings = {})
     }
 }
 
@@ -799,6 +796,6 @@ private fun HomeDarkPreview() {
         HomeScreen(crystalBalance = 2, coinBalance = 640, completedCount = 8, hasSavedGame = true,
             currentChapter = 9, currentChapterTitle = "Red Rock Valley",
             currentDifficulty = "Medium · Focus Flow", currentGridDescription = "6×7 Grid",
-            journeyComplete = false, onContinue = {}, onStartJourney = {}, onJourneyHistory = {}, onHowToPlay = {}, onSettings = {})
+            journeyComplete = false, onContinue = {}, onNewGame = {}, onJourneyHistory = {}, onHowToPlay = {}, onSettings = {})
     }
 }

@@ -81,13 +81,22 @@ fun CozyBlocksApp(settings: GameSettings) {
                 currentGridDescription = currentLevel.gridDescription,
                 journeyComplete = completedLevels.size >= PuzzleLevel.maxLevelId,
                 onContinue = {
-                    val chapterId = savedSession?.levelId ?: currentChapter
-                    val chapter = PuzzleLevel.requireLevel(chapterId)
-                    val gridSize = savedSession?.takeIf { it.levelId == chapterId }?.gridSize
-                        ?: chapter.pickGridSize()
-                    navController.navigate(Routes.game(chapterId, gridSize))
+                    savedSession?.let { session ->
+                        navController.navigate(Routes.game(session.levelId, session.gridSize)) {
+                            launchSingleTop = true
+                        }
+                    }
                 },
-                onStartJourney = { navController.navigate(Routes.LEVELS) },
+                onNewGame = {
+                    if (navController.currentDestination?.route == Routes.HOME) {
+                        val destination = if (savedSession == null) {
+                            Routes.game(currentChapter, currentLevel.pickGridSize())
+                        } else {
+                            Routes.LEVELS
+                        }
+                        navController.navigate(destination) { launchSingleTop = true }
+                    }
+                },
                 onJourneyHistory = { navController.navigate(Routes.HISTORY) },
                 onHowToPlay = { navController.navigate(Routes.HOW_TO) },
                 onSettings = { navController.navigate(Routes.SETTINGS) }
