@@ -54,6 +54,10 @@ fun CozyBlocksApp(settings: GameSettings) {
     val darkThemeEnabled = home.dark
     val imageSource = home.source
 
+    fun toggleSound() {
+        scope.launch { settings.toggleSoundEnabled() }
+    }
+
     fun goHome() {
         navController.navigate(Routes.HOME) {
             popUpTo(Routes.HOME) { inclusive = false }
@@ -147,13 +151,10 @@ fun CozyBlocksApp(settings: GameSettings) {
                 soundEnabled = soundEnabled,
                 hapticsEnabled = hapticsEnabled,
                 darkThemeEnabled = darkThemeEnabled,
-                imageSource = imageSource,
-                pexelsConfigured = imageRepository.isPexelsConfigured(),
                 onBack = { navController.popBackStack() },
                 onSoundChanged = { enabled -> scope.launch { settings.updateSoundEnabled(enabled) } },
                 onHapticsChanged = { enabled -> scope.launch { settings.updateHapticsEnabled(enabled) } },
                 onDarkThemeChanged = { enabled -> scope.launch { settings.updateDarkTheme(enabled) } },
-                onImageSourceChanged = { mode -> scope.launch { settings.updateImageSource(mode) } },
                 blockMotionPreset = home.blockMotion,
                 onBlockMotionPresetChanged = { speed ->
                     scope.launch { settings.updateBlockMotionSpeed(speed) }
@@ -188,6 +189,7 @@ fun CozyBlocksApp(settings: GameSettings) {
                 imageSource = imageSource,
                 soundEnabled = soundEnabled,
                 hapticsEnabled = hapticsEnabled,
+                onToggleSound = ::toggleSound,
                 replayMode = false,
                 onBack = { navController.popBackStack() },
                 onHome = { goHome() },
@@ -222,6 +224,7 @@ fun CozyBlocksApp(settings: GameSettings) {
                 imageSource = imageSource,
                 soundEnabled = soundEnabled,
                 hapticsEnabled = hapticsEnabled,
+                onToggleSound = ::toggleSound,
                 replayMode = true,
                 onBack = { navController.popBackStack() },
                 onHome = { goHome() },

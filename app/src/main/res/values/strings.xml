@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Snap Frame</string>
+    <string name="app_name">Picabloom: Photo Puzzle</string>
+    <string name="brand_name">Picabloom</string>
+    <string name="brand_subtitle">Photo Puzzle</string>
     <string name="game_paused">Game Paused</string>
     <string name="score">Score</string>
     <string name="best_score">Best Score</string>

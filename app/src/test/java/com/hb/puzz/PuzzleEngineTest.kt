@@ -15,12 +15,12 @@ class PuzzleEngineTest {
     }
 
     @Test
-    fun `size four produces four by five puzzle`() {
+    fun `size four produces four by six puzzle`() {
         val engine = PuzzleEngine(4, 123L)
         assertEquals(4, engine.gridColumns)
-        assertEquals(5, engine.gridRows)
-        assertEquals(20, engine.getTotalTiles())
-        assertEquals(31, engine.getTotalPossibleConnections())
+        assertEquals(6, engine.gridRows)
+        assertEquals(24, engine.getTotalTiles())
+        assertEquals(38, engine.getTotalPossibleConnections())
     }
 
     @Test

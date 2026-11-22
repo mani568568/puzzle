@@ -1,6 +1,7 @@
 package com.hb.puzz.data
 
 import android.content.Context
+import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.preferencesDataStore
 import com.hb.puzz.data.images.ImageSourceMode
@@ -84,14 +85,14 @@ data class CompletionReceipt(
     val hintBalance: Int = 0
 )
 
-class GameSettings(context: Context) {
+class GameSettings internal constructor(private val store: DataStore<Preferences>) {
+    constructor(context: Context) : this(context.applicationContext.picturePuzzleDataStore)
     companion object {
         const val INITIAL_CRYSTALS = 2
         const val INITIAL_HINTS = 1
         const val MAX_HINTS = 3
     }
 
-    private val store = context.applicationContext.picturePuzzleDataStore
     private val sessionKey = stringPreferencesKey("session_v2")
     private val completedKey = stringSetPreferencesKey("completed_levels")
     private val highestKey = intPreferencesKey("highest_level")
@@ -209,10 +210,15 @@ class GameSettings(context: Context) {
     }.toString()
 
     suspend fun saveSession(s: PuzzleSession) {
+        store.edit { p -> writeSession(p, s) }
+    }
+
+    private fun writeSession(p: MutablePreferences, s: PuzzleSession) {
         require(PuzzleLevel.requireLevel(s.levelId).acceptsSessionGridSize(s.baseGridSize, s.gridSize))
         require(s.positions.size == PuzzleEngine.tileCountForSize(s.gridSize) && s.positions.toSet().size == s.positions.size)
         require(s.positions.all { it in s.positions.indices })
-        store.edit { p -> p[sessionKey] = encode(s); removeLegacySession(p) }
+        p[sessionKey] = encode(s)
+        removeLegacySession(p)
     }
     private fun encode(s: PuzzleSession) = JSONObject().apply {
         put("level", s.levelId); put("grid", s.gridSize); put("positions", s.positions.joinToString(","))
@@ -337,24 +343,29 @@ class GameSettings(context: Context) {
         }
     }
 
-    /**
-     * Crystals are a lifetime power wallet. A new player receives exactly two free Crystals.
-     * Journey reset intentionally does not replenish them. Only entering an easier, reduced Grid Shift spends one.
-     */
-    suspend fun trySpendCrystal(): Boolean {
-        var spent = false
+    /** Commit the new layout and its price together. Replays only use the wallet. */
+    suspend fun commitGridShift(next: PuzzleSession, replayMode: Boolean): Boolean {
+        var committed = false
         store.edit { p ->
-            val current = (p[crystalsKey] ?: INITIAL_CRYSTALS).coerceAtLeast(0)
-            if (current > 0) {
-                p[crystalsKey] = current - 1
-                spent = true
+            if (next.gridSize != next.baseGridSize) {
+                val balance = p[crystalsKey] ?: INITIAL_CRYSTALS
+                if (balance <= 0) return@edit
+                p[crystalsKey] = balance - 1
             }
+            if (!replayMode) writeSession(p, next)
+            committed = true
         }
-        return spent
+        return committed
     }
 
     /** Purchase-credit hook. Call this only after Google Play Billing confirms a purchase. */
     suspend fun creditPurchasedCrystals(amount: Int) {
+        creditCrystals(amount)
+    }
+
+    suspend fun creditAdCrystal() = creditCrystals(1)
+
+    private suspend fun creditCrystals(amount: Int) {
         require(amount > 0)
         store.edit { p ->
             val current = (p[crystalsKey] ?: INITIAL_CRYSTALS).coerceAtLeast(0)
@@ -363,6 +374,9 @@ class GameSettings(context: Context) {
     }
 
     suspend fun updateSoundEnabled(v: Boolean) { store.edit { it[soundKey] = v } }
+    suspend fun toggleSoundEnabled() {
+        store.edit { p -> p[soundKey] = !(p[soundKey] ?: true) }
+    }
     suspend fun updateHapticsEnabled(v: Boolean) { store.edit { it[hapticsKey] = v } }
     suspend fun updateDarkTheme(v: Boolean) { store.edit { it[darkKey] = v } }
     suspend fun updateImageSource(v: ImageSourceMode) { store.edit { it[sourceKey] = v.storedValue } }

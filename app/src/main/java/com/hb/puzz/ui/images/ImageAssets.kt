@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.BitmapFactory
+import android.media.ThumbnailUtils
 import android.util.LruCache
 import kotlin.math.roundToInt
 
@@ -96,20 +97,8 @@ object ImageAssets {
             }
         ) ?: error("Could not decode ${resourceName(levelId)}.jpeg")
 
-        // The puzzle renderer expects a square source. Avoid a copy when the artwork is already square.
-        val square = if (decoded.width == decoded.height) {
-            decoded
-        } else {
-            val edge = minOf(decoded.width, decoded.height)
-            val left = (decoded.width - edge) / 2
-            val top = (decoded.height - edge) / 2
-            Bitmap.createBitmap(decoded, left, top, edge, edge).also {
-                if (it !== decoded && !decoded.isRecycled) decoded.recycle()
-            }
-        }
-
-        memoryCache.put(cacheKey, square)
-        return square
+        memoryCache.put(cacheKey, decoded)
+        return decoded
     }
 
     /** Smooth a small gallery-only copy once, so scrolling needs no live blur layer. */
@@ -118,7 +107,7 @@ object ImageAssets {
         memoryCache.get(key)?.let { return it }
         val source = loadBitmap(context, levelId, MIN_DECODE_EDGE)
         val edge = frost.sampleEdge
-        val small = Bitmap.createScaledBitmap(source, edge, edge, true)
+        val small = ThumbnailUtils.extractThumbnail(source, edge, edge)
         val pixels = IntArray(edge * edge)
         small.getPixels(pixels, 0, edge, 0, 0, edge, edge)
         if (small !== source) small.recycle()

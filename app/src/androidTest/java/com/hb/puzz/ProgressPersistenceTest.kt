@@ -5,6 +5,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.hb.puzz.data.GameSettings
 import com.hb.puzz.data.PuzzleSession
 import com.hb.puzz.data.images.ImageSourceMode
+import com.hb.puzz.domain.PuzzleEngine
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
@@ -18,7 +19,7 @@ class ProgressPersistenceTest {
     @Test fun duplicateCompletionAndResume() = runBlocking {
         val settings = GameSettings(InstrumentationRegistry.getInstrumentation().targetContext)
         settings.resetProgress()
-        val s = PuzzleSession(1, 4, IntArray(16) { it }, 28, 60_000,
+        val s = PuzzleSession(1, 4, IntArray(PuzzleEngine.tileCountForSize(4)) { it }, 28, 60_000,
             imageSource = ImageSourceMode.PRELOADED, started = true, imageIdentity = "bundled-1")
         settings.saveSession(s)
         assertArrayEquals(s.positions, settings.loadSession()!!.positions)

@@ -1,5 +1,6 @@
 package com.hb.puzz
 
+import com.hb.puzz.domain.PuzzleEngine
 import com.hb.puzz.domain.PuzzleLevel
 import kotlin.random.Random
 import org.junit.Assert.assertEquals
@@ -45,7 +46,7 @@ class PuzzleLevelTest {
         assertEquals("Hard · Master Quest", PuzzleLevel.Difficulty.HARD.displayLabel)
     }
     @Test
-    fun `grid shift allows at most two easier rectangular presets and never below size two`() {
+    fun `grid shift uses smaller rectangles and can still open legacy shifts`() {
         val easy = PuzzleLevel.requireLevel(1)
         assertTrue(easy.acceptsSessionGridSize(4, 3))
         assertTrue(easy.acceptsSessionGridSize(4, 2))
@@ -60,7 +61,23 @@ class PuzzleLevelTest {
         val max = PuzzleLevel.requireLevel(20)
         assertTrue(max.acceptsSessionGridSize(8, 7))
         assertTrue(max.acceptsSessionGridSize(8, 6))
-        assertTrue(!max.acceptsSessionGridSize(8, 5))
+        assertEquals(listOf(5, 4), PuzzleLevel.smallerGridSizes(8))
+        assertTrue(!max.acceptsSessionGridSize(8, 3))
+
+        assertTrue(PuzzleLevel.smallerGridSizes(PuzzleLevel.MIN_GRID_SIZE).isEmpty())
+        for (level in PuzzleLevel.ALL_LEVELS) {
+            for (base in level.randomGridSizes ?: (level.gridSize..level.gridSize)) {
+                val candidates = PuzzleLevel.smallerGridSizes(base)
+                assertTrue(candidates.size in 1..2)
+                for (target in candidates) {
+                    assertTrue(PuzzleEngine.rowsForSize(target) <= PuzzleEngine.rowsForSize(base))
+                    assertTrue(PuzzleEngine.columnsForSize(target) <= PuzzleEngine.columnsForSize(base))
+                    assertTrue(PuzzleEngine.tileCountForSize(target) < PuzzleEngine.tileCountForSize(base))
+                    assertTrue(level.acceptsSessionGridSize(base, target))
+                    assertTrue(level.acceptsGridSize(target))
+                }
+            }
+        }
     }
 
 }

@@ -25,6 +25,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.VolumeOff
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -79,7 +81,7 @@ private val PuzzleFrameWidth = 2.dp
 fun PicturePuzzleGameScreen(
     levelId: Int, gridSize: Int, settings: GameSettings,
     imageRepository: PuzzleImageRepository, imageSource: ImageSourceMode,
-    soundEnabled: Boolean, hapticsEnabled: Boolean,
+    soundEnabled: Boolean, hapticsEnabled: Boolean, onToggleSound: () -> Unit,
     onBack: () -> Unit, onHome: () -> Unit, onNextLevel: (Int) -> Unit,
     replayMode: Boolean = false,
     modifier: Modifier = Modifier
@@ -208,7 +210,7 @@ fun PicturePuzzleGameScreen(
             Row(
                 Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally)
             ) {
                 VibrantCircleAction(
                     onClick = { vm.saveAndLeave(onBack) },
@@ -222,8 +224,24 @@ fun PicturePuzzleGameScreen(
                 }
                 StandaloneTimer(
                     elapsedMillis = ui.elapsedMillis,
-                    modifier = Modifier.widthIn(min = 148.dp, max = 172.dp)
+                    modifier = Modifier.weight(1f, fill = false).widthIn(max = 112.dp).fillMaxWidth()
                 )
+                IconToggleButton(
+                    checked = soundEnabled,
+                    onCheckedChange = { onToggleSound() },
+                    modifier = Modifier.size(48.dp),
+                    colors = IconButtonDefaults.iconToggleButtonColors(
+                        containerColor = Color(0xFFF0F4F4),
+                        contentColor = Color(0xFF556366),
+                        checkedContainerColor = glassAqua,
+                        checkedContentColor = glassTealDark
+                    )
+                ) {
+                    Icon(
+                        imageVector = if (soundEnabled) Icons.AutoMirrored.Filled.VolumeUp else Icons.AutoMirrored.Filled.VolumeOff,
+                        contentDescription = if (soundEnabled) "Mute game sound" else "Unmute game sound"
+                    )
+                }
                 ResourceNotificationAction(
                     value = crystals,
                     description = "$crystals crystals. Crystal Power",
@@ -241,11 +259,9 @@ fun PicturePuzzleGameScreen(
                     icon = { GoldCoinIcon(Modifier.size(29.dp)) }
                 )
             }
-            // The puzzle itself is now a true rectangular grid: fewer columns and more rows.
-            // Match the board footprint to that logical geometry so cells remain balanced and
-            // the puzzle uses substantially more vertical screen space down toward the controls.
-            val puzzleAspectRatio = (vm.engine.gridColumns.toFloat() / vm.engine.gridRows.toFloat())
-                .coerceIn(0.54f, 0.64f)
+            // The photo owns the frame. Grid Shift repartitions that same rectangle.
+            val photoAspectRatio = ui.image?.bitmap?.let { it.width.toFloat() / it.height }
+                ?: (1280f / 2000f)
             val boardContent: @Composable BoxScope.() -> Unit = {
                 when {
                     ui.loading -> CircularProgressIndicator()
@@ -282,7 +298,12 @@ fun PicturePuzzleGameScreen(
                                         playMoveFeedback(vm.drop(anchor, target))
                                     },
                                     motionDurationMs = blockMotion.durationMillis,
-                                    modifier = Modifier.fillMaxSize().border(PuzzleFrameWidth, PuzzleFrameColor, RectangleShape),
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .border(PuzzleFrameWidth, PuzzleFrameColor, RectangleShape)
+                                        .semantics {
+                                            contentDescription = "Puzzle board, ${vm.engine.gridColumns} columns by ${vm.engine.gridRows} rows"
+                                        },
                                     inputEnabled = !ui.solved && (!ui.started || ui.running)
                                 )
                             }
@@ -311,7 +332,7 @@ fun PicturePuzzleGameScreen(
             Box(
                 Modifier
                     .fillMaxWidth(if (ui.solved) 0.80f else 0.945f)
-                    .aspectRatio(puzzleAspectRatio),
+                    .aspectRatio(photoAspectRatio),
                 contentAlignment = Alignment.Center,
                 content = boardContent
             )
@@ -402,6 +423,7 @@ fun PicturePuzzleGameScreen(
                                     }
                                 }
                             }
+                            if (finishedReady) CrystalRewardOffer(levelId)
                         } else if (!ui.saveError) {
                             LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                             Text(
@@ -533,9 +555,9 @@ fun PicturePuzzleGameScreen(
         icon = { CrystalIcon(28.dp) },
         title = { Text(if (crystals > 0) "Crystal Power" else "No Crystals left") },
         text = { Text(if (crystals > 0)
-            "You have $crystals Crystal${if (crystals == 1) "" else "s"}. Grid Shift spends 1 Crystal to rebuild the current Adventure on a randomly smaller grid, one or two levels lower. Fewer cells create larger pieces and make the puzzle easier. Restoring the original grid is free."
+            "You have $crystals Crystal${if (crystals == 1) "" else "s"}. Grid Shift spends 1 Crystal to shuffle the same photo into fewer, larger pieces. Restoring the original grid is free."
         else
-            "Your two free Journey Crystals have been used. Grid Shift cannot reduce the grid until more Crystals are purchased. The wallet is ready for Google Play Billing to credit purchased Crystals.") },
+            "Your two free Journey Crystals have been used. Grid Shift cannot reduce the grid until you earn another Crystal. Look for the optional rewarded ad after finishing an Adventure.") },
         confirmButton = { TextButton(onClick = { crystalInfo = false }) { Text("Got it") } })
 }
 
@@ -698,7 +720,7 @@ private fun StandaloneTimer(
     val shape = RoundedCornerShape(16.dp)
     Box(
         modifier = modifier
-            .height(52.dp)
+            .heightIn(min = 42.dp)
             .clip(shape)
             .background(
                 Brush.horizontalGradient(
@@ -714,7 +736,7 @@ private fun StandaloneTimer(
             color = Color(0xFF083F43),
             fontFamily = FontFamily.Monospace,
             fontWeight = FontWeight.Black,
-            fontSize = 22.sp,
+            fontSize = 18.sp,
             letterSpacing = 0.4.sp,
             maxLines = 1,
             softWrap = false

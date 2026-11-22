@@ -23,9 +23,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
@@ -57,7 +55,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -73,7 +72,6 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import com.hb.puzz.data.BlockMotionSpeed
-import com.hb.puzz.data.images.ImageSourceMode
 
 private val HomeCream = Color(0xFFFFF7EA)
 private val HomePanel = Color(0xFFFFFCF4)
@@ -161,7 +159,7 @@ fun HomeScreen(
 
             Spacer(Modifier.weight(0.75f))
 
-            SnapFrameLogo()
+            PicabloomLogo()
             Spacer(Modifier.height(18.dp))
 
             PremiumPlayLevelCallToAction(
@@ -239,23 +237,12 @@ private fun HomeBackgroundLandscapePuzzle() {
 }
 
 @Composable
-private fun SnapFrameLogo() {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(
-            text = stringResource(R.string.app_name),
-            color = Color(0xFF26435B),
-            fontSize = 44.sp,
-            lineHeight = 48.sp,
-            fontWeight = FontWeight.Black,
-            letterSpacing = 0.6.sp
-        )
-        Text(
-            text = "Relax. Rebuild. Reveal.",
-            color = Color(0xFF5E7C8E),
-            style = MaterialTheme.typography.titleMedium,
-            fontStyle = FontStyle.Italic
-        )
-    }
+private fun PicabloomLogo() {
+    Image(
+        painter = painterResource(R.drawable.picabloom_mark),
+        contentDescription = stringResource(R.string.app_name),
+        modifier = Modifier.width(288.dp).height(80.dp)
+    )
 }
 
 @Composable
@@ -528,13 +515,10 @@ fun SettingsScreen(
     soundEnabled: Boolean,
     hapticsEnabled: Boolean,
     darkThemeEnabled: Boolean,
-    imageSource: ImageSourceMode,
-    pexelsConfigured: Boolean,
     onBack: () -> Unit,
     onSoundChanged: (Boolean) -> Unit,
     onHapticsChanged: (Boolean) -> Unit,
     onDarkThemeChanged: (Boolean) -> Unit,
-    onImageSourceChanged: (ImageSourceMode) -> Unit,
     onResetProgress: () -> Unit,
     blockMotionPreset: BlockMotionSpeed = BlockMotionSpeed.BALANCED,
     onBlockMotionPresetChanged: (BlockMotionSpeed) -> Unit = {},
@@ -552,34 +536,18 @@ fun SettingsScreen(
             .safeDrawingPadding().verticalScroll(rememberScrollState()).padding(16.dp)
     ) {
         ScreenHeader(title = "Settings", onBack = onBack)
+        val policyUrl = com.hb.puzz.BuildConfig.PRIVACY_POLICY_URL
+        if (policyUrl.isNotEmpty()) {
+            val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
+            androidx.compose.material3.TextButton(onClick = { uriHandler.openUri(policyUrl) }) { Text("Privacy policy") }
+        }
+        val ads = com.hb.puzz.LocalCrystalAds.current
+        if (ads?.privacyRequired == true) {
+            androidx.compose.material3.TextButton(onClick = ads::openPrivacy) { Text("Ad privacy choices") }
+        }
         SettingRow("Sound", soundEnabled, onSoundChanged)
         SettingRow("Haptics", hapticsEnabled, onHapticsChanged)
         SettingRow("Dark Theme", darkThemeEnabled, onDarkThemeChanged)
-
-        Spacer(Modifier.height(24.dp))
-        Text("Puzzle Images", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-        Spacer(Modifier.height(6.dp))
-        Text(
-            "Choose live Pexels photos or artwork bundled with the journey.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Spacer(Modifier.height(8.dp))
-
-        ImageSourceRow(
-            title = "Pexels photos",
-            subtitle = if (pexelsConfigured) "Online photos are cached per level" else "Online photos are unavailable in this build",
-            selected = imageSource == ImageSourceMode.PEXELS,
-            icon = { Icon(Icons.Default.Cloud, contentDescription = null) },
-            onClick = { onImageSourceChanged(ImageSourceMode.PEXELS) }
-        )
-        ImageSourceRow(
-            title = "Preloaded artwork",
-            subtitle = "Works fully offline and uses no network data",
-            selected = imageSource == ImageSourceMode.PRELOADED,
-            icon = { Icon(Icons.Default.Image, contentDescription = null) },
-            onClick = { onImageSourceChanged(ImageSourceMode.PRELOADED) }
-        )
 
         Spacer(Modifier.height(24.dp))
         Text("Block Movement", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
@@ -626,42 +594,6 @@ fun SettingsScreen(
             },
             dismissButton = { TextButton(onClick = { confirmReset = false }) { Text("Cancel") } }
         )
-    }
-}
-
-@Composable
-private fun ImageSourceRow(
-    title: String,
-    subtitle: String,
-    selected: Boolean,
-    icon: @Composable () -> Unit,
-    onClick: () -> Unit
-) {
-    VibrantAction(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp),
-        shape = RoundedCornerShape(18.dp),
-        brush = if (selected) VibrantBlueBrush else Brush.linearGradient(
-            listOf(Color(0xFFFFF3CF), Color(0xFFE8F8FF))
-        ),
-        contentColor = if (selected) Color.White else HomeAccentDeep,
-        motion = ActionMotion.SHRINK
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            icon()
-            Column(modifier = Modifier.fillMaxWidth(0.67f).padding(horizontal = 12.dp)) {
-                Text(title, fontWeight = FontWeight.Medium)
-                Text(
-                    subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (selected) Color.White.copy(alpha = 0.88f) else MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            RadioButton(selected = selected, onClick = onClick)
-        }
     }
 }
 
@@ -739,17 +671,17 @@ fun HowToPlayScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
         Spacer(Modifier.height(16.dp))
         Text("3. Blocks glide into their new positions. Keep rearranging until the full image is restored.", style = MaterialTheme.typography.bodyLarge)
         Spacer(Modifier.height(16.dp))
-        Text("4. You can choose Pexels photos or bundled offline artwork in Settings.", style = MaterialTheme.typography.bodyLarge)
+        Text("4. Tap the speaker beside the timer to mute the music and sound effects. Tap it again to turn sound on.", style = MaterialTheme.typography.bodyLarge)
         Spacer(Modifier.height(16.dp))
-        Text("5. Adventures use tall rectangular grids with more rows than columns. Early puzzles begin around 4×5 and grow up to 8×9, with surprise rectangular grids near the end.", style = MaterialTheme.typography.bodyLarge)
+        Text("5. Your first adventures have four columns and six rows. Grid Shift changes the number of pieces inside the same photo frame.", style = MaterialTheme.typography.bodyLarge)
         Spacer(Modifier.height(16.dp))
         Text("6. The timer starts automatically as soon as the adventure opens. Pause freezes time while keeping the puzzle visible. Resume continues from the same board.", style = MaterialTheme.typography.bodyLarge)
         Spacer(Modifier.height(16.dp))
         Text("7. Coins = completion + speed + efficient moves. The fixed targets depend on grid size. Replays award only improvement over your Adventure best. Coins have no cash value.", style = MaterialTheme.typography.bodyLarge)
         Spacer(Modifier.height(16.dp))
-        Text("8. Crystal Power: every player receives 2 free Crystals for the whole Journey. Grid Shift spends 1 Crystal to rebuild the current Adventure on a randomly smaller grid, down by 1 or 2 sizes. Fewer cells make larger pieces and an easier puzzle. Restore Grid is always free. When Crystals reach 0, Grid Shift is locked until more are purchased.", style = MaterialTheme.typography.bodyLarge)
+        Text("8. Crystal Power: every player receives 2 free Crystals for the whole Journey. Grid Shift spends 1 Crystal to rebuild the current Adventure with fewer, larger pieces. Restore Grid is always free. When Crystals reach 0, you can earn another Crystal from an optional ad after finishing an Adventure.", style = MaterialTheme.typography.bodyLarge)
         Spacer(Modifier.height(16.dp))
-        Text("9. The four controls below the puzzle are Timer, Grid Shift, Hint and Restart. The Journey starts with 1 Hint. Each Hint solves one random block/group step and counts as one move. Finish an Adventure within its optimal move target to earn +1 Hint, up to 3 stored Hints.", style = MaterialTheme.typography.bodyLarge)
+        Text("9. The four controls below the puzzle are Pause or Resume, Grid Shift, Hint and Restart. The Journey starts with 1 Hint. Each Hint solves one random block/group step and counts as one move. Finish an Adventure within its optimal move target to earn +1 Hint, up to 3 stored Hints.", style = MaterialTheme.typography.bodyLarge)
         Spacer(Modifier.height(16.dp))
         Text("10. In Settings, Block Movement lets you choose Relaxed, Balanced, or Quick puzzle motion. Use Relaxed for a slower, smoother glide.", style = MaterialTheme.typography.bodyLarge)
         Spacer(Modifier.height(16.dp))

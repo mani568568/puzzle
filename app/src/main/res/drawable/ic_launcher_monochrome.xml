@@ -1,5 +1,2 @@
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
-    <path android:fillColor="#FFFFFFFF" android:pathData="M58,24 Q76,27 82,46 L58,46Z"/>
-    <path android:fillColor="#FFFFFFFF" android:fillType="evenOdd" android:pathData="M54,27 V50 H81 C82,65 71,80 55,82 C40,83 27,71 26,57 C25,42 37,28 54,27Z M32,59 C39,58 42,50 49,51 C55,51 57,60 65,57 Q72,53 77,55 L77,60 Q72,58 65,62 C56,65 53,56 48,56 C43,55 39,63 32,64Z M40,44 A5,5 0,1 0,50,44 A5,5 0,1 0,40,44Z"/>
-</vector>
+<bitmap xmlns:android="http://schemas.android.com/apk/res/android"
+    android:src="@drawable/picabloom_themed" android:gravity="fill" />

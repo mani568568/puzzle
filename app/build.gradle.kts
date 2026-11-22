@@ -18,6 +18,26 @@ val pexelsApiKey = (
         ?: ""
 ).replace("\\", "\\\\").replace("\"", "\\\"")
 
+// Debug and closed-test bundles default to Google's rewarded test unit.
+fun adSetting(name: String) =
+    providers.gradleProperty(name).orNull ?: localProperties.getProperty(name)
+
+val privacyPolicyUrl = adSetting("PRIVACY_POLICY_URL").orEmpty()
+require(privacyPolicyUrl.isEmpty() || (
+    privacyPolicyUrl.startsWith("https://") && privacyPolicyUrl.none { it.isWhitespace() || it == '"' || it == '\\' }
+))
+val demoAppId = "ca-app-pub-3940256099942544~3347511713"
+val demoRewardId = "ca-app-pub-3940256099942544/5224354917"
+val appIdForAds = adSetting("ADMOB_APP_ID") ?: demoAppId
+val liveRewards = adSetting("ADMOB_LIVE_ADS") == "true"
+val releaseRewardId = if (liveRewards) requireNotNull(adSetting("ADMOB_REWARDED_ID")) else demoRewardId
+require(appIdForAds.matches(Regex("ca-app-pub-[0-9]{16}~[0-9]{10}")))
+if (liveRewards) {
+    require(!appIdForAds.startsWith("ca-app-pub-3940256099942544"))
+    require(releaseRewardId.matches(Regex("ca-app-pub-[0-9]{16}/[0-9]{10}")))
+    require(releaseRewardId.substringBefore('/') == appIdForAds.substringBefore('~'))
+}
+
 android {
     namespace = "com.hb.puzz"
     compileSdk = 37
@@ -26,8 +46,12 @@ android {
         applicationId = "com.hb.puzz"
         minSdk = 25
         targetSdk = 37
-        versionCode = 2
-        versionName = "1.1"
+        versionCode = 3
+        versionName = "1.2"
+
+        buildConfigField("String", "PRIVACY_POLICY_URL", "\"$privacyPolicyUrl\"")
+        manifestPlaceholders["admobAppId"] = appIdForAds
+        buildConfigField("String", "REWARDED_AD_ID", "\"$demoRewardId\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "PEXELS_API_KEY", "\"$pexelsApiKey\"")
@@ -35,6 +59,7 @@ android {
 
     buildTypes {
         release {
+            buildConfigField("String", "REWARDED_AD_ID", "\"$releaseRewardId\"")
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
@@ -52,6 +77,8 @@ android {
 }
 
 dependencies {
+    implementation("com.google.android.gms:play-services-ads:25.5.0")
+    implementation("com.google.android.ump:user-messaging-platform:4.0.0")
     implementation("com.google.android.material:material:1.14.0")
 
     implementation(libs.androidx.core.ktx)

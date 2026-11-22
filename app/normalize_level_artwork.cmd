@@ -12,7 +12,7 @@ if not exist "%ART_DIR%" (
 
 echo.
 echo ============================================================
-echo SnapFrame level artwork normalizer
+echo Picabloom level artwork normalizer
 echo ============================================================
 echo Folder: %ART_DIR%
 echo.
@@ -42,7 +42,7 @@ powershell.exe -NoLogo -NoProfile -Command ^
   "        if ((Test-Path -LiteralPath $target) -and ($f.FullName -ne $target)) {" ^
   "          Write-Host ('DUPLICATE: ' + $f.Name + ' conflicts with ' + $targetName) -ForegroundColor Yellow;" ^
   "        } else {" ^
-  "          $tmpName = ('__snapframe_tmp_{0}_{1}{2}' -f $id, [guid]::NewGuid().ToString('N'), $ext);" ^
+  "          $tmpName = ('__picabloom_tmp_{0}_{1}{2}' -f $id, [guid]::NewGuid().ToString('N'), $ext);" ^
   "          $tmp = Join-Path $dir $tmpName;" ^
   "          Move-Item -LiteralPath $f.FullName -Destination $tmp;" ^
   "          Move-Item -LiteralPath $tmp -Destination $target;" ^

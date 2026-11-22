@@ -194,7 +194,7 @@ class PuzzleGameViewModel(
         moveCount = mutable.value.moves, elapsedMillis = clock.elapsedMillis())
 
     private fun checkpoint() {
-        if (replayMode) return
+        if (replayMode || gridShiftBusy) return
         val snap = snapshot()
         writes.trySend { settings.saveSession(snap); mutable.value = mutable.value.copy(saveError = false) }
     }
@@ -210,25 +210,20 @@ class PuzzleGameViewModel(
             return
         }
         pause()
-        if (replayMode) {
-            onSaved()
-            return
-        }
-        val snap = snapshot()
-        val solved = mutable.value.solved
         writes.trySend {
-            if (!solved) {
-                settings.saveSession(snap)
+            // A grid change already in the queue may have replaced the layout.
+            if (!replayMode && !mutable.value.solved) {
+                settings.saveSession(snapshot())
                 mutable.value = mutable.value.copy(saveError = false)
             }
-            if (!mutable.value.saveError) onSaved()
+            if (replayMode || !mutable.value.saveError) onSaved()
         }
     }
 
     /** 0 = no new merge, 1 = merge, 2 = completed. */
     fun drop(anchor: Int, target: Int): Int {
         val current = mutable.value
-        if (current.loading || current.error != null || current.solved) return 0
+        if (leaving || gridShiftBusy || current.loading || current.error != null || current.solved) return 0
         // Before the first move the board is already interactive. The first actual drop
         // starts active play automatically. A deliberate Pause still disables movement.
         if (current.started && !current.running) return 0
@@ -270,7 +265,7 @@ class PuzzleGameViewModel(
     fun hintStep(onResult: (Int) -> Unit = {}) {
         val initial = mutable.value
         if (
-            hintBusy || initial.loading || initial.error != null || initial.solved || initial.image == null ||
+            leaving || gridShiftBusy || hintBusy || initial.loading || initial.error != null || initial.solved || initial.image == null ||
             (initial.started && !initial.running)
         ) {
             onResult(0)
@@ -368,7 +363,7 @@ class PuzzleGameViewModel(
     }
 
     fun restart() {
-        if (mutable.value.loading || mutable.value.image == null) return
+        if (leaving || gridShiftBusy || mutable.value.loading || mutable.value.image == null) return
         celebrationJob?.cancel()
         clock.restore(0)
         engine.shuffle()
@@ -384,75 +379,42 @@ class PuzzleGameViewModel(
         checkpoint()
     }
 
-    /**
-     * First press moves the current Adventure to a randomly easier grid (-1 or -2).
-     * Pressing again restores the original grid. A grid change intentionally starts a fresh
-     * arrangement because pieces from different grid sizes cannot be mapped safely.
-     */
+    /** Change the tile layout inside the current photo and keep the clock and move history. */
     fun toggleGridShift() {
         val current = mutable.value
-        if (gridShiftBusy || current.loading || current.error != null || current.solved || current.image == null) return
+        if (leaving || gridShiftBusy || hintBusy || current.loading || current.error != null ||
+            current.solved || current.image == null) return
 
-        val baseGrid = session.baseGridSize.coerceAtLeast(2)
-        if (engine.gridSize != baseGrid) {
-            // Restoring the Adventure's original board is always free.
-            applyGridSize(baseGrid, current)
-            return
-        }
-
-        val lowestShift = maxOf(PuzzleLevel.MIN_GRID_SIZE, baseGrid - 2)
-        if (lowestShift >= baseGrid) return
+        val base = session.baseGridSize
+        val target = if (engine.gridSize == base) {
+            PuzzleLevel.smallerGridSizes(base).randomOrNull() ?: return
+        } else base
 
         gridShiftBusy = true
-        viewModelScope.launch {
+        writes.trySend {
             try {
-                // Charge exactly once before entering the easier board. If the wallet is empty,
-                // nothing about the current puzzle changes.
-                if (!settings.trySpendCrystal()) return@launch
-                val latest = mutable.value
-                if (latest.loading || latest.error != null || latest.solved || latest.image == null) return@launch
-                // Randomly reduce the grid by one or two levels, bounded by MIN_GRID_SIZE.
-                val targetGrid = kotlin.random.Random.nextInt(lowestShift, baseGrid)
-                applyGridSize(targetGrid, latest)
+                val newEngine = PuzzleEngine(target)
+                val next = snapshot().copy(gridSize = target, positions = newEngine.getCurrentPositions())
+                if (settings.commitGridShift(next, replayMode)) {
+                    celebrationJob?.cancel()
+                    session = next
+                    engine = newEngine
+                    mutable.value = mutable.value.copy(
+                        gridSize = target,
+                        boardVersion = mutable.value.boardVersion + 1,
+                        elapsedMillis = clock.elapsedMillis(),
+                        connections = newEngine.getCorrectConnections().size,
+                        celebration = emptySet(),
+                        largestMerge = 0,
+                        saveError = false
+                    )
+                }
             } finally {
                 gridShiftBusy = false
             }
         }
     }
 
-    private fun applyGridSize(targetGrid: Int, current: PicturePuzzleUiState) {
-        celebrationJob?.cancel()
-        clock.pause()
-        val baseGrid = session.baseGridSize.coerceAtLeast(2)
-
-        engine = PuzzleEngine(targetGrid)
-        clock.restore(0)
-        userPaused = false
-        pausedByLifecycle = false
-        clock.resume()
-        session = session.copy(
-            gridSize = targetGrid,
-            positions = engine.getCurrentPositions(),
-            moveCount = 0,
-            elapsedMillis = 0,
-            sessionId = UUID.randomUUID().toString(),
-            started = true,
-            speedEligible = true,
-            baseGridSize = baseGrid
-        )
-        mutable.value = PicturePuzzleUiState(
-            loading = false,
-            image = current.image,
-            boardVersion = current.boardVersion + 1,
-            elapsedMillis = 0,
-            started = true,
-            running = true,
-            connections = engine.getCorrectConnections().size,
-            gridSize = targetGrid,
-            baseGridSize = baseGrid
-        )
-        checkpoint()
-    }
     override fun onCleared() {
         clock.pause()
         writes.close()

@@ -8,7 +8,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.CompositionLocalProvider
 import com.hb.puzz.data.GameSettings
 import com.hb.puzz.ui.CozyBlocksApp
 import com.hb.puzz.ui.theme.CozyBlocksTheme
@@ -18,8 +18,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        val settings = GameSettings(applicationContext)
+        val ads = CrystalAds(this, settings)
         setContent {
-            val settings = remember { GameSettings(applicationContext) }
             val darkTheme by settings.darkThemeFlow.collectAsState(initial = false)
 
             DisposableEffect(darkTheme) {
@@ -31,8 +32,11 @@ class MainActivity : ComponentActivity() {
                 onDispose { }
             }
             CozyBlocksTheme(darkTheme = darkTheme) {
-                CozyBlocksApp(settings = settings)
+                CompositionLocalProvider(LocalCrystalAds provides ads) {
+                    CozyBlocksApp(settings = settings)
+                }
             }
         }
+        ads.updateConsent()
     }
 }

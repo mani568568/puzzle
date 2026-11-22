@@ -25,13 +25,16 @@ data class PuzzleLevel(
 
     fun acceptsBaseGridSize(size: Int): Boolean = randomGridSizes?.contains(size) ?: (size == gridSize)
 
-    fun acceptsSessionGridSize(baseGridSize: Int, size: Int): Boolean =
-        acceptsBaseGridSize(baseGridSize) &&
-            size in maxOf(MIN_GRID_SIZE, baseGridSize - 2)..baseGridSize
+    fun acceptsSessionGridSize(baseGridSize: Int, size: Int): Boolean {
+        if (!acceptsBaseGridSize(baseGridSize)) return false
+        // Earlier releases selected by preset ID, even when that grew the board.
+        val legacyRange = maxOf(MIN_GRID_SIZE, baseGridSize - 2)..baseGridSize
+        return size in legacyRange || size in smallerGridSizes(baseGridSize)
+    }
 
     fun acceptsGridSize(size: Int): Boolean {
         val baseRange = randomGridSizes ?: (gridSize..gridSize)
-        return size in maxOf(MIN_GRID_SIZE, baseRange.first - 2)..baseRange.last
+        return baseRange.any { acceptsSessionGridSize(it, size) }
     }
 
     fun pickGridSize(random: Random = Random.Default): Int {
@@ -51,6 +54,17 @@ data class PuzzleLevel(
     companion object {
         const val MIN_GRID_SIZE: Int = 2
         const val MAX_GRID_SIZE: Int = 8
+
+        /** Up to two lower presets whose cells fit inside the original row and column counts. */
+        fun smallerGridSizes(base: Int): List<Int> {
+            val columns = PuzzleEngine.columnsForSize(base)
+            val rows = PuzzleEngine.rowsForSize(base)
+            return (base - 1 downTo MIN_GRID_SIZE).filter { size ->
+                val newColumns = PuzzleEngine.columnsForSize(size)
+                val newRows = PuzzleEngine.rowsForSize(size)
+                newColumns <= columns && newRows <= rows && newColumns * newRows < columns * rows
+            }.take(2)
+        }
 
         /**
          * drawable-nodpi contains level_001.jpeg ... level_999.jpeg, therefore levels are generated
