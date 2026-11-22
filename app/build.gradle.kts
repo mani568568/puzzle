@@ -18,7 +18,7 @@ val pexelsApiKey = (
         ?: ""
 ).replace("\\", "\\\\").replace("\"", "\\\"")
 
-// Debug and closed-test bundles default to Google's rewarded test unit.
+// Debug and closed-test bundles default to Google's test units.
 fun adSetting(name: String) =
     providers.gradleProperty(name).orNull ?: localProperties.getProperty(name)
 
@@ -29,14 +29,23 @@ require(privacyPolicyUrl.isEmpty() || (
 val demoAppId = "ca-app-pub-3940256099942544~3347511713"
 val demoRewardId = "ca-app-pub-3940256099942544/5224354917"
 val appIdForAds = adSetting("ADMOB_APP_ID") ?: demoAppId
-val liveRewards = adSetting("ADMOB_LIVE_ADS") == "true"
-val releaseRewardId = if (liveRewards) requireNotNull(adSetting("ADMOB_REWARDED_ID")) else demoRewardId
+val liveAds = adSetting("ADMOB_LIVE_ADS") == "true"
+val demoBannerId = "ca-app-pub-3940256099942544/6300978111"
+val demoInterstitialId = "ca-app-pub-3940256099942544/1033173712"
 require(appIdForAds.matches(Regex("ca-app-pub-[0-9]{16}~[0-9]{10}")))
-if (liveRewards) {
-    require(!appIdForAds.startsWith("ca-app-pub-3940256099942544"))
-    require(releaseRewardId.matches(Regex("ca-app-pub-[0-9]{16}/[0-9]{10}")))
-    require(releaseRewardId.substringBefore('/') == appIdForAds.substringBefore('~'))
+
+fun releaseUnit(property: String, testUnit: String): String {
+    if (!liveAds) return testUnit
+    val unit = requireNotNull(adSetting(property)) { "Set $property to your AdMob unit ID." }
+    require(!appIdForAds.startsWith("ca-app-pub-3940256099942544") &&
+        unit.matches(Regex("ca-app-pub-[0-9]{16}/[0-9]{10}")) &&
+        unit.substringBefore('/') == appIdForAds.substringBefore('~')) { "Check ADMOB_APP_ID and $property." }
+    return unit
 }
+val releaseRewardId = releaseUnit("ADMOB_REWARDED_ID", demoRewardId)
+val releaseBannerId = releaseUnit("ADMOB_BANNER_ID", demoBannerId)
+val releaseInterstitialId = releaseUnit("ADMOB_INTERSTITIAL_ID", demoInterstitialId)
+require(setOf(releaseRewardId, releaseBannerId, releaseInterstitialId).size == 3) { "Use a separate unit for each ad format." }
 
 android {
     namespace = "com.hb.puzz"
@@ -46,12 +55,14 @@ android {
         applicationId = "com.hb.puzz"
         minSdk = 25
         targetSdk = 37
-        versionCode = 3
-        versionName = "1.2"
+        versionCode = 4
+        versionName = "1.3"
 
         buildConfigField("String", "PRIVACY_POLICY_URL", "\"$privacyPolicyUrl\"")
         manifestPlaceholders["admobAppId"] = appIdForAds
         buildConfigField("String", "REWARDED_AD_ID", "\"$demoRewardId\"")
+        buildConfigField("String", "BANNER_AD_ID", "\"$demoBannerId\"")
+        buildConfigField("String", "INTERSTITIAL_AD_ID", "\"$demoInterstitialId\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "PEXELS_API_KEY", "\"$pexelsApiKey\"")
@@ -60,6 +71,8 @@ android {
     buildTypes {
         release {
             buildConfigField("String", "REWARDED_AD_ID", "\"$releaseRewardId\"")
+            buildConfigField("String", "BANNER_AD_ID", "\"$releaseBannerId\"")
+            buildConfigField("String", "INTERSTITIAL_AD_ID", "\"$releaseInterstitialId\"")
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
@@ -77,6 +90,7 @@ android {
 }
 
 dependencies {
+    implementation("com.android.billingclient:billing:8.3.0")
     implementation("com.google.android.gms:play-services-ads:25.5.0")
     implementation("com.google.android.ump:user-messaging-platform:4.0.0")
     implementation("com.google.android.material:material:1.14.0")

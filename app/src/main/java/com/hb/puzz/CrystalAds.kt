@@ -1,6 +1,13 @@
 package com.hb.puzz
 
-import android.app.Activity
+import android.os.SystemClock
+import androidx.activity.ComponentActivity
+import androidx.lifecycle.Lifecycle
+import com.google.android.gms.ads.interstitial.InterstitialAd
+import com.google.android.gms.ads.interstitial.InterstitialAdLoadCallback
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
 import android.widget.Toast
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -28,7 +35,7 @@ internal val LocalCrystalAds = staticCompositionLocalOf<CrystalAds?> { null }
 // An earned wallet write must finish even when the activity rotates or the player leaves the level.
 private val walletWrites = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
-internal class CrystalAds(private val activity: Activity, private val settings: GameSettings) {
+internal class CrystalAds(private val activity: ComponentActivity, private val settings: GameSettings, private val premium: PremiumBilling) {
     private val consent = UserMessagingPlatform.getConsentInformation(activity)
     private var initialized = false
     private var initializing = false
@@ -72,6 +79,55 @@ internal class CrystalAds(private val activity: Activity, private val settings: 
         }
     }
 
+    private var interstitial: InterstitialAd? = null
+    private var loadedAt = 0L
+    private var fullScreen = false
+
+    private fun mayShowStandardAds() =
+        active() && ready && consent.canRequestAds() && premium.ownership == Ownership.FREE
+
+    suspend fun preloadInterstitials() {
+        try {
+            while (mayShowStandardAds()) {
+                if (interstitial == null || SystemClock.elapsedRealtime() - loadedAt >= 55 * 60_000L) {
+                    interstitial = null
+                    val loaded = suspendCancellableCoroutine<InterstitialAd?> { continuation ->
+                        InterstitialAd.load(activity, BuildConfig.INTERSTITIAL_AD_ID, AdRequest.Builder().build(),
+                            object : InterstitialAdLoadCallback() {
+                                override fun onAdLoaded(ad: InterstitialAd) {
+                                    if (continuation.isActive) continuation.resume(ad)
+                                }
+                                override fun onAdFailedToLoad(error: LoadAdError) {
+                                    if (continuation.isActive) continuation.resume(null)
+                                }
+                            })
+                    }
+                    if (mayShowStandardAds()) {
+                        interstitial = loaded
+                        loadedAt = SystemClock.elapsedRealtime()
+                    }
+                }
+                delay(if (interstitial == null) 60_000L else 15_000L)
+            }
+        } finally {
+            interstitial = null
+        }
+    }
+
+    fun showLevelBreak() {
+        if (!mayShowStandardAds() || fullScreen ||
+            !activity.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) return
+        val ad = interstitial ?: return
+        interstitial = null
+        if (SystemClock.elapsedRealtime() - loadedAt >= 55 * 60_000L) return
+        fullScreen = true
+        ad.fullScreenContentCallback = object : FullScreenContentCallback() {
+            override fun onAdDismissedFullScreenContent() { fullScreen = false }
+            override fun onAdFailedToShowFullScreenContent(error: AdError) { fullScreen = false }
+        }
+        ad.show(activity)
+    }
+
     fun load(onLoaded: (RewardedAd?) -> Unit) {
         if (!ready || !consent.canRequestAds()) {
             onLoaded(null)
@@ -85,13 +141,18 @@ internal class CrystalAds(private val activity: Activity, private val settings: 
     }
 
     fun show(ad: RewardedAd, onEarned: () -> Unit, onClosed: () -> Unit) {
-        if (!active() || !ready || !consent.canRequestAds()) {
+        if (!active() || fullScreen || !ready || !consent.canRequestAds()) {
             onClosed()
             return
         }
+        fullScreen = true
+        fun closed() {
+            fullScreen = false
+            onClosed()
+        }
         ad.fullScreenContentCallback = object : FullScreenContentCallback() {
-            override fun onAdDismissedFullScreenContent() = onClosed()
-            override fun onAdFailedToShowFullScreenContent(error: AdError) = onClosed()
+            override fun onAdDismissedFullScreenContent() = closed()
+            override fun onAdFailedToShowFullScreenContent(error: AdError) = closed()
         }
         var credited = false
         ad.show(activity) {

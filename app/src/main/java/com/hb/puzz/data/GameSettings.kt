@@ -82,7 +82,8 @@ data class CompletionReceipt(
     val awarded: Int,
     val balance: Int,
     val hintAwarded: Int = 0,
-    val hintBalance: Int = 0
+    val hintBalance: Int = 0,
+    val levelBreak: Boolean = false
 )
 
 class GameSettings internal constructor(private val store: DataStore<Preferences>) {
@@ -276,7 +277,9 @@ class GameSettings internal constructor(private val store: DataStore<Preferences
                 .put("awarded", award)
                 .put("hintAwarded", hintAward)
                 .toString()
-            p[completedKey] = (p[completedKey] ?: emptySet()) + s.levelId.toString()
+            val completed = p[completedKey].orEmpty()
+            val firstClear = s.levelId.toString() !in completed
+            p[completedKey] = completed + s.levelId.toString()
             p[highestKey] = maxOf(p[highestKey] ?: 1, (s.levelId + 1).coerceAtMost(PuzzleLevel.maxLevelId))
 
             val now = System.currentTimeMillis()
@@ -313,7 +316,8 @@ class GameSettings internal constructor(private val store: DataStore<Preferences
                 awarded = award,
                 balance = balance,
                 hintAwarded = hintAward,
-                hintBalance = updatedHints
+                hintBalance = updatedHints,
+                levelBreak = firstClear && (completed.size + 1) % 4 == 0
             )
         }
         return checkNotNull(receipt)

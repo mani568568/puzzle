@@ -545,6 +545,21 @@ fun SettingsScreen(
         if (ads?.privacyRequired == true) {
             androidx.compose.material3.TextButton(onClick = ads::openPrivacy) { Text("Ad privacy choices") }
         }
+        val premium = com.hb.puzz.LocalPremium.current
+        if (premium != null) {
+            Text("Picabloom Premium", style = MaterialTheme.typography.titleMedium)
+            Text("One-time purchase. Removes the bottom banner and level-break ads. You can still watch an ad to earn a Crystal.")
+            when {
+                premium.ownership == com.hb.puzz.Ownership.PREMIUM -> Text("Premium active")
+                premium.pending -> Text("Purchase pending in Google Play")
+                premium.price != null && premium.ownership == com.hb.puzz.Ownership.FREE ->
+                    androidx.compose.material3.Button(onClick = premium::buy, enabled = !premium.launching) {
+                        Text("Get Premium · ${premium.price}")
+                    }
+                else -> Text(premium.message.ifEmpty { "Checking Google Play…" })
+            }
+            androidx.compose.material3.TextButton(onClick = premium::refresh) { Text("Restore purchases") }
+        }
         SettingRow("Sound", soundEnabled, onSoundChanged)
         SettingRow("Haptics", hapticsEnabled, onHapticsChanged)
         SettingRow("Dark Theme", darkThemeEnabled, onDarkThemeChanged)

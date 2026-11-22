@@ -119,6 +119,14 @@ fun PicturePuzzleGameScreen(
         label = "finished-reveal"
     )
     val finishedReady = finishedTarget && finishedReveal >= 0.92f
+    val ads = com.hb.puzz.LocalCrystalAds.current
+    var breakHandled by androidx.compose.runtime.saveable.rememberSaveable(levelId) { mutableStateOf(false) }
+    LaunchedEffect(finishedReady, ui.receipt) {
+        if (finishedReady && !replayMode && ui.receipt?.levelBreak == true && !breakHandled) {
+            breakHandled = true
+            ads?.showLevelBreak()
+        }
+    }
     val celebrationBurst = remember(levelId) { Animatable(0f) }
     LaunchedEffect(finishedTarget) {
         if (finishedTarget) {

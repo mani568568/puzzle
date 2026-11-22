@@ -32,6 +32,22 @@ class PuzzleControlsPersistenceTest {
         }
     }
 
+    @Test fun onlyEveryFourthFirstClearOffersAnInterstitial() = runBlocking {
+        fun solved(level: Int) = PuzzleSession(level, 4, IntArray(PuzzleEngine.tileCountForSize(4)) { it }, 20)
+        openSettings { settings ->
+            for (level in 1..3) assertFalse(settings.completeSession(solved(level)).levelBreak)
+            assertFalse(settings.completeSession(solved(2)).levelBreak)
+        }
+        openSettings { settings ->
+            val fourth = solved(4)
+            assertTrue(settings.completeSession(fourth).levelBreak)
+            assertFalse(settings.completeSession(fourth).levelBreak)
+            assertFalse(settings.completeSession(solved(4)).levelBreak)
+            for (level in 5..7) assertFalse(settings.completeSession(solved(level)).levelBreak)
+            assertTrue(settings.completeSession(solved(8)).levelBreak)
+        }
+    }
+
     @Test fun soundAndShiftSurviveReopening() = runBlocking {
         val original = PuzzleSession(
             levelId = 15, gridSize = 8, positions = PuzzleEngine(8, 1).getCurrentPositions(),
